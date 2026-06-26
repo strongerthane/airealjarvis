@@ -12,6 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiTtsRouteImport } from './routes/api/tts'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as ApiPublicN8nRouteImport } from './routes/api/public/n8n'
+import { Route as ApiPublicN8nStreamRouteImport } from './routes/api/public/n8n.stream'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -28,35 +30,68 @@ const ApiChatRoute = ApiChatRouteImport.update({
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicN8nRoute = ApiPublicN8nRouteImport.update({
+  id: '/api/public/n8n',
+  path: '/api/public/n8n',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicN8nStreamRoute = ApiPublicN8nStreamRouteImport.update({
+  id: '/stream',
+  path: '/stream',
+  getParentRoute: () => ApiPublicN8nRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/api/chat': typeof ApiChatRoute
   '/api/tts': typeof ApiTtsRoute
+  '/api/public/n8n': typeof ApiPublicN8nRouteWithChildren
+  '/api/public/n8n/stream': typeof ApiPublicN8nStreamRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api/chat': typeof ApiChatRoute
   '/api/tts': typeof ApiTtsRoute
+  '/api/public/n8n': typeof ApiPublicN8nRouteWithChildren
+  '/api/public/n8n/stream': typeof ApiPublicN8nStreamRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/api/chat': typeof ApiChatRoute
   '/api/tts': typeof ApiTtsRoute
+  '/api/public/n8n': typeof ApiPublicN8nRouteWithChildren
+  '/api/public/n8n/stream': typeof ApiPublicN8nStreamRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/chat' | '/api/tts'
+  fullPaths:
+    | '/'
+    | '/api/chat'
+    | '/api/tts'
+    | '/api/public/n8n'
+    | '/api/public/n8n/stream'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/chat' | '/api/tts'
-  id: '__root__' | '/' | '/api/chat' | '/api/tts'
+  to:
+    | '/'
+    | '/api/chat'
+    | '/api/tts'
+    | '/api/public/n8n'
+    | '/api/public/n8n/stream'
+  id:
+    | '__root__'
+    | '/'
+    | '/api/chat'
+    | '/api/tts'
+    | '/api/public/n8n'
+    | '/api/public/n8n/stream'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiTtsRoute: typeof ApiTtsRoute
+  ApiPublicN8nRoute: typeof ApiPublicN8nRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -82,13 +117,40 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/n8n': {
+      id: '/api/public/n8n'
+      path: '/api/public/n8n'
+      fullPath: '/api/public/n8n'
+      preLoaderRoute: typeof ApiPublicN8nRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/n8n/stream': {
+      id: '/api/public/n8n/stream'
+      path: '/stream'
+      fullPath: '/api/public/n8n/stream'
+      preLoaderRoute: typeof ApiPublicN8nStreamRouteImport
+      parentRoute: typeof ApiPublicN8nRoute
+    }
   }
 }
+
+interface ApiPublicN8nRouteChildren {
+  ApiPublicN8nStreamRoute: typeof ApiPublicN8nStreamRoute
+}
+
+const ApiPublicN8nRouteChildren: ApiPublicN8nRouteChildren = {
+  ApiPublicN8nStreamRoute: ApiPublicN8nStreamRoute,
+}
+
+const ApiPublicN8nRouteWithChildren = ApiPublicN8nRoute._addFileChildren(
+  ApiPublicN8nRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApiChatRoute: ApiChatRoute,
   ApiTtsRoute: ApiTtsRoute,
+  ApiPublicN8nRoute: ApiPublicN8nRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
