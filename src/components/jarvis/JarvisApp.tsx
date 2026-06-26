@@ -43,16 +43,7 @@ export function JarvisApp() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [interim, setInterim] = useState("");
   const [n8nMessages, setN8nMessages] = useState<InboxEntry[]>([]);
-  const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
   const [bootstrapped, setBootstrapped] = useState(false);
-
-  // Bootstrap from localStorage (client-only) once.
-  useEffect(() => {
-    setInitialMessages(loadStored());
-    const v = localStorage.getItem(VOICE_KEY);
-    if (v) setVoiceIdState(v);
-    setBootstrapped(true);
-  }, []);
 
   const setVoiceId = useCallback((v: string) => {
     setVoiceIdState(v);
@@ -65,9 +56,22 @@ export function JarvisApp() {
 
   const { messages, sendMessage, status, setMessages } = useChat({
     id: "jarvis-main",
-    messages: initialMessages,
     transport,
   });
+
+  // Bootstrap from localStorage (client-only) once.
+  useEffect(() => {
+    const stored = loadStored();
+    if (stored.length) {
+      setMessages(stored);
+      // Mark stored assistant messages as already spoken so we don't replay history.
+      for (const m of stored) if (m.role === "assistant") spokenIdsRef.current.add(m.id);
+    }
+    const v = localStorage.getItem(VOICE_KEY);
+    if (v) setVoiceIdState(v);
+    setBootstrapped(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Persist messages whenever they change.
   useEffect(() => {
