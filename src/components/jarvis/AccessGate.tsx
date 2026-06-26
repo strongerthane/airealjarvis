@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const ACCESS_PASSWORD = import.meta.env.VITE_ACCESS_PASSWORD as string | undefined;
+const ACCESS_PASSWORD = "IronMohit";
 
 interface Props {
   children: React.ReactNode;
@@ -9,19 +9,21 @@ interface Props {
 export function AccessGate({ children }: Props) {
   const [input, setInput] = useState("");
   const [granted, setGranted] = useState(() => {
-    // If no password set, allow access
-    if (!ACCESS_PASSWORD) return true;
-    return sessionStorage.getItem("jarvis:access") === "granted";
+    try {
+      return sessionStorage.getItem("jarvis:access") === "granted";
+    } catch {
+      return false;
+    }
   });
   const [denied, setDenied] = useState(false);
   const [attempts, setAttempts] = useState(0);
 
-  if (granted || !ACCESS_PASSWORD) return <>{children}</>;
+  if (granted) return <>{children}</>;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (input === ACCESS_PASSWORD) {
-      sessionStorage.setItem("jarvis:access", "granted");
+      try { sessionStorage.setItem("jarvis:access", "granted"); } catch {}
       setGranted(true);
       setDenied(false);
     } else {
