@@ -77,14 +77,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "Own AI JARVIS" },
+      { name: "description", content: "With AI advancing rapidly, our future is getting more closely aligned to those we see in movies. This Iron Man style JARVIS is similar to  the Marvel Movies." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "Own AI JARVIS" },
+      { property: "og:description", content: "With AI advancing rapidly, our future is getting more closely aligned to those we see in movies. This Iron Man style JARVIS is similar to  the Marvel Movies." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Own AI JARVIS" },
+      { name: "twitter:description", content: "With AI advancing rapidly, our future is getting more closely aligned to those we see in movies. This Iron Man style JARVIS is similar to  the Marvel Movies." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/e2663fa1-7ebe-44e9-a3a1-c0aa352bcba6/id-preview-94550132--08893a1f-a02b-43d0-ad41-5f421cb0eb76.lovable.app-1782491265357.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/e2663fa1-7ebe-44e9-a3a1-c0aa352bcba6/id-preview-94550132--08893a1f-a02b-43d0-ad41-5f421cb0eb76.lovable.app-1782491265357.png" },
     ],
     links: [
       {
