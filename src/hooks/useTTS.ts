@@ -4,7 +4,7 @@ export function useTTS() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ctxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const dataRef = useRef<Uint8Array | null>(null);
+  const dataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const rafRef = useRef<number | null>(null);
   const [speaking, setSpeaking] = useState(false);
   const [amplitude, setAmplitude] = useState(0);
@@ -62,7 +62,7 @@ export function useTTS() {
         source.connect(analyser);
         analyser.connect(ctx.destination);
         analyserRef.current = analyser;
-        dataRef.current = new Uint8Array(analyser.fftSize);
+        dataRef.current = new Uint8Array(new ArrayBuffer(analyser.fftSize));
 
         audio.onplay = () => {
           setSpeaking(true);
