@@ -8,13 +8,7 @@ interface Props {
 
 export function AccessGate({ children }: Props) {
   const [input, setInput] = useState("");
-  const [granted, setGranted] = useState(() => {
-    try {
-      return sessionStorage.getItem("jarvis:access") === "granted";
-    } catch {
-      return false;
-    }
-  });
+  const [granted, setGranted] = useState(false);
   const [denied, setDenied] = useState(false);
   const [attempts, setAttempts] = useState(0);
 
@@ -23,7 +17,6 @@ export function AccessGate({ children }: Props) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (input === ACCESS_PASSWORD) {
-      try { sessionStorage.setItem("jarvis:access", "granted"); } catch {}
       setGranted(true);
       setDenied(false);
     } else {
@@ -35,7 +28,6 @@ export function AccessGate({ children }: Props) {
 
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#06080a] text-zinc-100">
-      {/* ambient */}
       <div
         className="pointer-events-none absolute inset-0"
         style={{
@@ -52,7 +44,6 @@ export function AccessGate({ children }: Props) {
       />
 
       <div className="relative z-10 flex w-full max-w-sm flex-col items-center gap-8 px-6">
-        {/* Logo */}
         <div className="flex flex-col items-center gap-3">
           <div className="h-3 w-3 rounded-full bg-teal-400 shadow-[0_0_16px_rgba(20,184,166,0.9)]" />
           <div className="font-mono text-xs uppercase tracking-[0.6em] text-teal-300">
@@ -63,7 +54,6 @@ export function AccessGate({ children }: Props) {
           </div>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="w-full">
           <div className="rounded-lg border border-teal-900/60 bg-white/[0.03] p-6 backdrop-blur">
             <label className="mb-2 block font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-400">
