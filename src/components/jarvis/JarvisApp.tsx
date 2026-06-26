@@ -59,6 +59,9 @@ export function JarvisApp() {
     transport,
   });
 
+  // Track which assistant messages have already been spoken (avoid replaying history).
+  const spokenIdsRef = useRef<Set<string>>(new Set());
+
   // Bootstrap from localStorage (client-only) once.
   useEffect(() => {
     const stored = loadStored();
@@ -82,7 +85,6 @@ export function JarvisApp() {
   }, [messages, bootstrapped]);
 
   // Speak each assistant reply once it finishes streaming.
-  const spokenIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (status !== "ready") return;
     const last = messages[messages.length - 1];
