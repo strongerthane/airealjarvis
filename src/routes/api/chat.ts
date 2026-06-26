@@ -7,25 +7,20 @@ export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const body = (await request.json()) as { messages?: unknown };
+        const body = (await request.json()) as {
+          messages?: unknown;
+          clientDate?: string;
+          clientTime?: string;
+        };
         if (!Array.isArray(body.messages)) {
           return new Response("Messages required", { status: 400 });
         }
         const key = process.env.LOVABLE_API_KEY;
         if (!key) return new Response("Missing LOVABLE_API_KEY", { status: 500 });
 
-        // Compute date/time fresh on every request
-        const now = new Date();
-        const dateStr = now.toLocaleDateString("en-GB", {
-          weekday: "long",
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        });
-        const timeStr = now.toLocaleTimeString("en-GB", {
-          hour: "2-digit",
-          minute: "2-digit",
-        });
+        // Use client-supplied date/time (always correct regardless of server clock)
+        const dateStr = body.clientDate ?? "unknown date";
+        const timeStr = body.clientTime ?? "unknown time";
 
         const systemPrompt = `You are JARVIS, an advanced AI assistant in the style of Tony Stark's JARVIS from Iron Man.
 
