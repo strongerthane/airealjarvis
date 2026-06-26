@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { JarvisApp } from "@/components/jarvis/JarvisApp";
+import { AccessGate } from "@/components/jarvis/AccessGate";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -14,5 +15,9 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
-  return <JarvisApp />;
+  return (
+    <AccessGate>
+      <JarvisApp />
+    </AccessGate>
+  );
 }
