@@ -36,6 +36,21 @@ function messageToText(m: UIMessage): string {
     .trim();
 }
 
+function getClientDateTime(): { dateStr: string; timeStr: string } {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("en-GB", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  const timeStr = now.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return { dateStr, timeStr };
+}
+
 type InboxEntry = { id: string; text: string };
 
 export function JarvisApp() {
@@ -52,7 +67,17 @@ export function JarvisApp() {
 
   const { speak, stop: stopSpeaking, speaking, amplitude } = useTTS();
 
-  const transport = useMemo(() => new DefaultChatTransport({ api: "/api/chat" }), []);
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/chat",
+        prepareSendMessagesBody: (options) => {
+          const { dateStr, timeStr } = getClientDateTime();
+          return { ...options, clientDate: dateStr, clientTime: timeStr };
+        },
+      }),
+    [],
+  );
 
   const { messages, sendMessage, status, setMessages } = useChat({
     id: "jarvis-main",
