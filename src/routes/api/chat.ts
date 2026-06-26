@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { convertToModelMessages, streamText, type UIMessage } from "ai";
 
 import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
-import { JARVIS_SYSTEM_PROMPT } from "@/lib/jarvis-prompt";
+import { getJarvisSystemPrompt } from "@/lib/jarvis-prompt";
 
 export const Route = createFileRoute("/api/chat")({
   server: {
@@ -17,8 +17,8 @@ export const Route = createFileRoute("/api/chat")({
 
         const gateway = createLovableAiGatewayProvider(key);
         const result = streamText({
-          model: gateway("google/gemini-3-flash-preview"),
-          system: JARVIS_SYSTEM_PROMPT,
+          model: gateway("google/gemini-2.5-flash"),
+          system: getJarvisSystemPrompt(),
           messages: await convertToModelMessages(body.messages as UIMessage[]),
         });
 
