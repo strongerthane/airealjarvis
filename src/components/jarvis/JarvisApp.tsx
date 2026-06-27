@@ -138,12 +138,10 @@ export function JarvisApp() {
       new DefaultChatTransport({
         api: "/api/chat",
         prepareSendMessagesBody: (options) => {
-          const { dateStr, timeStr } = getClientDateTime();
-          const loc = locationRef.current;
-          const locationStr = loc
-            ? `${loc.city ? loc.city + ", " : ""}lat ${loc.lat.toFixed(3)}, lon ${loc.lon.toFixed(3)}`
-            : null;
-          return { ...options, clientDate: dateStr, clientTime: timeStr, clientLocation: locationStr };
+          const now = new Date();
+          const clientDate = now.toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+          const clientTime = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+          return { ...options, clientDate, clientTime };
         },
       }),
     [],
