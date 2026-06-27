@@ -87,8 +87,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:site", content: "@Lovable" },
       { name: "twitter:title", content: "Own AI JARVIS" },
       { name: "twitter:description", content: "With AI advancing rapidly, our future is getting more closely aligned to those we see in movies. This Iron Man style JARVIS is similar to  the Marvel Movies." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/e2663fa1-7ebe-44e9-a3a1-c0aa352bcba6/id-preview-94550132--08893a1f-a02b-43d0-ad41-5f421cb0eb76.lovable.app-1782491265357.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/e2663fa1-7ebe-44e9-a3a1-c0aa352bcba6/id-preview-94550132--08893a1f-a02b-43d0-ad41-5f421cb0eb76.lovable.app-1782491265357.png" },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/1127675f-9d20-40b3-bd69-138d75a17ffc" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/1127675f-9d20-40b3-bd69-138d75a17ffc" },
     ],
     links: [
       {
