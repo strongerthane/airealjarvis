@@ -137,11 +137,11 @@ export function JarvisApp() {
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
-        prepareSendMessagesRequest: ({ body }) => {
+        prepareSendMessagesRequest: ({ body, messages }) => {
           const now = new Date();
           const clientDate = now.toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
           const clientTime = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-          return { body: { ...body, clientDate, clientTime } };
+          return { body: { ...body, messages, clientDate, clientTime } };
         },
       }),
     [],
