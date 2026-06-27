@@ -1,6 +1,6 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { Camera, CameraOff, MapPin, Settings } from "lucide-react";
+import { Camera, CameraOff, Mail, MapPin, Settings, Video, VideoOff } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useIdleTimer } from "@/hooks/useIdleTimer";
@@ -8,6 +8,7 @@ import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useTTS } from "@/hooks/useTTS";
 
 import { ChatPanel, type DisplayMessage } from "./ChatPanel";
+import { EmailDraftModal } from "./EmailDraftModal";
 import { InputBar } from "./InputBar";
 import { Orb, type OrbState } from "./Orb";
 import { SettingsDialog } from "./SettingsDialog";
@@ -25,7 +26,6 @@ function loadStored(): UIMessage[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    // Filter out any messages with missing/empty parts to avoid sending blank messages
     return (parsed as UIMessage[]).filter(
       (m) => m && m.id && m.role && Array.isArray(m.parts) && m.parts.length > 0
     );
@@ -38,12 +38,14 @@ function messageToText(m: UIMessage): string {
   return m.parts.map((p) => (p.type === "text" ? p.text : "")).join("").trim();
 }
 
-function getClientDateTime(): { dateStr: string; timeStr: string } {
-  const now = new Date();
-  return {
-    dateStr: now.toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
-    timeStr: now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
-  };
+// Detect if a JARVIS response contains an email draft
+function extractEmailDraft(text: string): { subject: string; body: string } | null {
+  const subjectMatch = text.match(/subject[:\s]+(.+)/i);
+  const hasEmailKeywords = /dear |hi |hello |regards|sincerely|best regards|to whom/i.test(text);
+  if (!subjectMatch && !hasEmailKeywords) return null;
+  const subject = subjectMatch ? subjectMatch[1].trim() : "Email Draft";
+  const body = text;
+  return { subject, body };
 }
 
 type InboxEntry = { id: string; text: string };
@@ -61,6 +63,14 @@ export function JarvisApp() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  // Recording state
+  const [recording, setRecording] = useState(false);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+
+  // Email draft state
+  const [emailDraft, setEmailDraft] = useState<{ subject: string; body: string } | null>(null);
 
   // Location state
   const locationRef = useRef<{ lat: number; lon: number; city?: string } | null>(null);
@@ -102,13 +112,18 @@ export function JarvisApp() {
   // Camera toggle
   const toggleCamera = useCallback(async () => {
     if (cameraOn) {
+      // Stop recording if active
+      if (recording && recorderRef.current) {
+        recorderRef.current.stop();
+        setRecording(false);
+      }
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
       setCameraOn(false);
       setCameraError(null);
     } else {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: true });
         streamRef.current = stream;
         setCameraOn(true);
         setCameraError(null);
@@ -122,7 +137,35 @@ export function JarvisApp() {
         setCameraError("Camera access denied.");
       }
     }
-  }, [cameraOn]);
+  }, [cameraOn, recording]);
+
+  // Toggle video recording
+  const toggleRecording = useCallback(() => {
+    if (!streamRef.current) return;
+    if (recording) {
+      recorderRef.current?.stop();
+    } else {
+      chunksRef.current = [];
+      const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+        ? "video/webm;codecs=vp9"
+        : "video/webm";
+      const recorder = new MediaRecorder(streamRef.current, { mimeType });
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: "video/webm" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `jarvis-recording-${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.webm`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setRecording(false);
+      };
+      recorder.start();
+      recorderRef.current = recorder;
+      setRecording(true);
+    }
+  }, [recording]);
 
   // Capture frame as base64
   const captureFrame = useCallback((): string | null => {
@@ -186,7 +229,10 @@ export function JarvisApp() {
     if (!text) return;
     spokenIdsRef.current.add(last.id);
     void speak(text, voiceId);
-    // Push browser notification for JARVIS replies
+    // Check if this is an email draft
+    const draft = extractEmailDraft(text);
+    if (draft) setEmailDraft(draft);
+    // Push browser notification
     if ("Notification" in window && Notification.permission === "granted" && document.hidden) {
       new Notification("J.A.R.V.I.S", { body: text.slice(0, 100), icon: "/favicon.ico" });
     }
@@ -196,10 +242,8 @@ export function JarvisApp() {
     (text: string) => {
       setInterim("");
       void sendMessage({ text });
-      return;
-      void sendMessage({ text });
     },
-    [sendMessage, cameraOn, captureFrame],
+    [sendMessage],
   );
 
   const { listening, supported, start, stop } = useSpeechRecognition({ onFinal: handleFinal, onInterim: setInterim });
@@ -234,10 +278,8 @@ export function JarvisApp() {
   }, []);
 
   const onSend = useCallback((text: string) => {
-    if (cameraOn) {
-    }
     void sendMessage({ text });
-  }, [sendMessage, cameraOn, captureFrame]);
+  }, [sendMessage]);
 
   const toggleMic = useCallback(() => { if (listening) stop(); else start(); }, [listening, start, stop]);
 
@@ -255,7 +297,14 @@ export function JarvisApp() {
       {cameraOn && (
         <div className="absolute top-16 left-4 z-30 rounded-lg overflow-hidden border border-teal-500/30 shadow-lg" style={{ width: 180, height: 135 }}>
           <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
-          <div className="absolute top-1 right-1 bg-red-500 rounded-full w-2 h-2 animate-pulse" />
+          {recording && <div className="absolute top-1 right-1 bg-red-500 rounded-full w-2 h-2 animate-pulse" />}
+          {/* Record button overlay */}
+          <button
+            onClick={toggleRecording}
+            className={`absolute bottom-1 right-1 rounded-full px-2 py-0.5 text-[9px] font-bold transition ${recording ? "bg-red-500 text-white" : "bg-white/20 text-white hover:bg-white/40"}`}
+          >
+            {recording ? "■ STOP" : "● REC"}
+          </button>
         </div>
       )}
       <canvas ref={canvasRef} className="hidden" />
@@ -274,6 +323,15 @@ export function JarvisApp() {
               <span className="text-[10px] text-zinc-400">{locationRef.current?.city ?? "Located"}</span>
             </div>
           )}
+          {/* Email compose shortcut */}
+          <button
+            onClick={() => void sendMessage({ text: "Draft an email for me" })}
+            title="Draft an email"
+            className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-zinc-400 hover:bg-white/10 transition"
+          >
+            <Mail className="h-3 w-3" />
+            <span>EMAIL</span>
+          </button>
           {/* Camera toggle */}
           <button
             onClick={toggleCamera}
@@ -314,7 +372,15 @@ export function JarvisApp() {
 
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} voiceId={voiceId} setVoiceId={setVoiceId} webhookUrl={webhookUrl} onClearHistory={clearHistory} />
       <SleepScreen asleep={idle} onWake={wake} />
+
+      {/* Email Draft Modal */}
+      {emailDraft && (
+        <EmailDraftModal
+          subject={emailDraft.subject}
+          body={emailDraft.body}
+          onClose={() => setEmailDraft(null)}
+        />
+      )}
     </div>
   );
 }
-
