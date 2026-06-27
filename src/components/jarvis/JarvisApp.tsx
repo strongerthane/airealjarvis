@@ -137,11 +137,11 @@ export function JarvisApp() {
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
-        prepareSendMessagesBody: (options) => {
+        prepareSendMessagesRequest: ({ body }) => {
           const now = new Date();
           const clientDate = now.toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
           const clientTime = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-          return { ...options, clientDate, clientTime };
+          return { body: { ...body, clientDate, clientTime } };
         },
       }),
     [],
@@ -261,7 +261,7 @@ export function JarvisApp() {
           {Boolean(locationRef.current) && (
             <div title="Location acquired" className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1">
               <MapPin className="h-3 w-3 text-teal-400" />
-              <span className="text-[10px] text-zinc-400">{locationRef.current.city ?? "Located"}</span>
+              <span className="text-[10px] text-zinc-400">{locationRef.current?.city ?? "Located"}</span>
             </div>
           )}
           {/* Camera toggle */}
