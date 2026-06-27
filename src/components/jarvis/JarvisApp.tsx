@@ -187,17 +187,8 @@ export function JarvisApp() {
   const handleFinal = useCallback(
     (text: string) => {
       setInterim("");
-      // If camera on, capture and send frame + text together
-      if (cameraOn) {
-        const frame = captureFrame();
-        if (frame) {
-          void sendMessage({
-            text,
-            experimental_attachments: [{ name: "camera.jpg", contentType: "image/jpeg", url: `data:image/jpeg;base64,${frame}` }],
-          });
-          return;
-        }
-      }
+      void sendMessage({ text });
+      return;
       void sendMessage({ text });
     },
     [sendMessage, cameraOn, captureFrame],
@@ -236,11 +227,6 @@ export function JarvisApp() {
 
   const onSend = useCallback((text: string) => {
     if (cameraOn) {
-      const frame = captureFrame();
-      if (frame) {
-        void sendMessage({ text, experimental_attachments: [{ name: "camera.jpg", contentType: "image/jpeg", url: `data:image/jpeg;base64,${frame}` }] });
-        return;
-      }
     }
     void sendMessage({ text });
   }, [sendMessage, cameraOn, captureFrame]);
@@ -274,7 +260,7 @@ export function JarvisApp() {
         </div>
         <div className="flex items-center gap-2">
           {/* Location indicator */}
-          {locationRef.current && (
+          {Boolean(locationRef.current) && (
             <div title="Location acquired" className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1">
               <MapPin className="h-3 w-3 text-teal-400" />
               <span className="text-[10px] text-zinc-400">{locationRef.current.city ?? "Located"}</span>
@@ -323,3 +309,4 @@ export function JarvisApp() {
     </div>
   );
 }
+
