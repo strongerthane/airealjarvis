@@ -24,7 +24,11 @@ function loadStored(): UIMessage[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as UIMessage[]) : [];
+    if (!Array.isArray(parsed)) return [];
+    // Filter out any messages with missing/empty parts to avoid sending blank messages
+    return (parsed as UIMessage[]).filter(
+      (m) => m && m.id && m.role && Array.isArray(m.parts) && m.parts.length > 0
+    );
   } catch {
     return [];
   }
@@ -141,7 +145,13 @@ export function JarvisApp() {
           const now = new Date();
           const clientDate = now.toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
           const clientTime = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-          return { body: { ...body, messages, clientDate, clientTime } };
+          const loc = locationRef.current;
+          const clientLocation = loc
+            ? loc.city
+              ? `${loc.city} (${loc.lat.toFixed(2)}, ${loc.lon.toFixed(2)})`
+              : `${loc.lat.toFixed(2)}, ${loc.lon.toFixed(2)}`
+            : null;
+          return { body: { ...body, messages, clientDate, clientTime, clientLocation } };
         },
       }),
     [],
