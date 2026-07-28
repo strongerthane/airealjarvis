@@ -26,22 +26,14 @@ function stateLabel(state: OrbState) {
 export function Orb({ state = "idle", amplitude = 0 }: OrbProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<OrbSceneApi | null>(null);
+  const rafRef = useRef<number | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
-  const initRafRef = useRef<number | null>(null);
   const [ready, setReady] = useState(false);
 
   const glow = useMemo(() => {
     const base =
-      state === "listening"
-        ? 0.75
-        : state === "thinking"
-          ? 0.55
-          : state === "speaking"
-            ? 0.95
-            : 0.4;
-
-    const audioBoost = Math.min(0.5, Math.max(0, amplitude || 0) * 0.8);
-    return Math.min(1.2, base + audioBoost);
+      state === "listening" ? 0.78 : state === "thinking" ? 0.55 : state === "speaking" ? 0.95 : 0.42;
+    return Math.min(1.2, base + Math.min(0.4, Math.max(0, amplitude) * 0.8));
   }, [state, amplitude]);
 
   useEffect(() => {
@@ -50,7 +42,7 @@ export function Orb({ state = "idle", amplitude = 0 }: OrbProps) {
 
     let cancelled = false;
 
-    const cleanupScene = () => {
+    const destroy = () => {
       if (sceneRef.current) {
         sceneRef.current.dispose();
         sceneRef.current = null;
@@ -64,19 +56,18 @@ export function Orb({ state = "idle", amplitude = 0 }: OrbProps) {
       const height = host.clientHeight;
 
       if (width < 40 || height < 40) {
-        initRafRef.current = window.requestAnimationFrame(tryInit);
+        rafRef.current = window.requestAnimationFrame(tryInit);
         return;
       }
 
       if (sceneRef.current) return;
 
-      cleanupScene();
-
       try {
         sceneRef.current = createOrbScene(host);
         setReady(true);
       } catch (error) {
-        console.error("Failed to create orb scene:", error);
+        console.error("Orb init failed:", error);
+        destroy();
       }
     };
 
@@ -85,32 +76,16 @@ export function Orb({ state = "idle", amplitude = 0 }: OrbProps) {
     if ("ResizeObserver" in window) {
       resizeObserverRef.current = new ResizeObserver(() => {
         if (cancelled) return;
-
-        const width = host.clientWidth;
-        const height = host.clientHeight;
-
-        if (width < 40 || height < 40) return;
-
-        if (!sceneRef.current) {
-          tryInit();
-        }
+        if (!sceneRef.current) tryInit();
       });
-
       resizeObserverRef.current.observe(host);
     }
 
     return () => {
       cancelled = true;
-
-      if (initRafRef.current != null) {
-        cancelAnimationFrame(initRafRef.current);
-        initRafRef.current = null;
-      }
-
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
       resizeObserverRef.current?.disconnect();
-      resizeObserverRef.current = null;
-
-      cleanupScene();
+      destroy();
     };
   }, []);
 
@@ -118,21 +93,10 @@ export function Orb({ state = "idle", amplitude = 0 }: OrbProps) {
     const scene = sceneRef.current;
     if (!scene) return;
 
-    if (state === "thinking") {
-      scene.zoomBy(0.9975);
-    }
-
-    if (state === "listening") {
-      scene.rotateBy(0.003, 0.001);
-    }
-
-    if (state === "speaking") {
-      scene.rotateBy(0.006, 0.0015);
-    }
-
-    if (state === "idle") {
-      scene.rotateBy(0.0015, 0);
-    }
+    if (state === "listening") scene.rotateBy(0.003, 0.001);
+    if (state === "thinking") scene.zoomBy(0.9975);
+    if (state === "speaking") scene.rotateBy(0.006, 0.0015);
+    if (state === "idle") scene.rotateBy(0.0012, 0);
   }, [state, amplitude]);
 
   return (
@@ -149,7 +113,7 @@ export function Orb({ state = "idle", amplitude = 0 }: OrbProps) {
                 : state === "thinking"
                   ? "radial-gradient(circle, rgba(147,197,253,0.18) 0%, rgba(30,64,175,0.12) 35%, rgba(15,23,42,0) 72%)"
                   : "radial-gradient(circle, rgba(59,130,246,0.16) 0%, rgba(30,64,175,0.1) 35%, rgba(15,23,42,0) 72%)",
-          transform: `scale(${1 + Math.min(0.16, amplitude * 0.12)})`,
+          transform: `scale(${1 + Math.min(0.14, amplitude * 0.12)})`,
         }}
       />
 
@@ -169,16 +133,15 @@ export function Orb({ state = "idle", amplitude = 0 }: OrbProps) {
       {!ready && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div
+            aria-hidden
             className="rounded-full"
             style={{
               width: 190,
               height: 190,
               background:
                 "radial-gradient(circle at 35% 30%, rgba(147,197,253,0.95) 0%, rgba(59,130,246,0.85) 38%, rgba(15,23,42,0.96) 100%)",
-              boxShadow:
-                "0 0 80px rgba(59,130,246,0.25), inset 0 0 40px rgba(255,255,255,0.12)",
+              boxShadow: "0 0 80px rgba(59,130,246,0.25), inset 0 0 40px rgba(255,255,255,0.12)",
             }}
-            aria-hidden
           />
         </div>
       )}
