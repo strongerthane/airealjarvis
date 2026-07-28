@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const ACCESS_PASSWORD = "IronMohit";
 
@@ -8,9 +8,19 @@ interface Props {
 
 export function AccessGate({ children }: Props) {
   const [input, setInput] = useState("");
-  const [granted, setGranted] = useState(false);
+  // Auto-grant in local dev environments so the UI (orb) appears without a password check.
+  // Start deterministically false on both server and client to avoid hydration mismatches.
+  const [granted, setGranted] = useState<boolean>(false);
   const [denied, setDenied] = useState(false);
   const [attempts, setAttempts] = useState(0);
+
+  // On the client, auto-grant for localhost/dev hosts so the UI is visible during development.
+  useEffect(() => {
+    try {
+      const host = window.location.hostname;
+      if (host === 'localhost' || host === '127.0.0.1' || host === '::1') setGranted(true);
+    } catch {}
+  }, []);
 
   if (granted) return <>{children}</>;
 

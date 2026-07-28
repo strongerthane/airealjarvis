@@ -1,3 +1,5 @@
+"use client";
+
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { Camera, CameraOff, Mail, MapPin, Settings, Video, VideoOff } from "lucide-react";
@@ -183,7 +185,7 @@ export function JarvisApp() {
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
-        api: "/api/chat",
+        api: typeof window !== 'undefined' ? `${window.location.origin}/api/chat` : "/api/chat",
         prepareSendMessagesRequest: ({ body, messages }) => {
           const now = new Date();
           const clientDate = now.toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
@@ -350,7 +352,14 @@ export function JarvisApp() {
 
       <main className="relative z-10 mx-auto grid w-full max-w-6xl grid-cols-1 gap-6 px-4 pb-32 lg:grid-cols-[1fr_400px] lg:gap-8 lg:px-8">
         <section className="flex min-h-[55vh] flex-col items-center justify-center py-8 lg:min-h-[calc(100vh-12rem)]">
-          <Orb state={orbState} amplitude={amplitude} />
+          {typeof window !== 'undefined' ? (
+            <Orb state={orbState} amplitude={amplitude} />
+          ) : (
+            <div style={{ width: 420, height: 420 }} aria-hidden>
+              {/* Server-side deterministic placeholder to avoid heavy imports */}
+              <div style={{ width: 200, height: 200, margin: '0 auto', borderRadius: 9999, background: 'radial-gradient(circle at 30% 28%, #9fbafc 0%, #3b82f6 40%, #0f172a 95%)' }} />
+            </div>
+          )}
           <div className="mt-10 text-center text-xs uppercase tracking-[0.4em] text-zinc-500">
             {orbState === "idle" && "Standing by"}
             {orbState === "listening" && "Listening..."}

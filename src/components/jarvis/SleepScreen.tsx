@@ -3,21 +3,24 @@ import { useEffect, useState } from "react";
 import { Orb } from "./Orb";
 
 export function SleepScreen({ asleep, onWake }: { asleep: boolean; onWake: () => void }) {
+  // Prevent SSR/client mismatch by rendering dynamic time/date only on the client.
+  const [isClient, setIsClient] = useState(false);
   const [now, setNow] = useState<Date>(() => new Date());
 
   useEffect(() => {
-    if (!asleep) return;
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    if (!asleep || !isClient) return;
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
-  }, [asleep]);
+  }, [asleep, isClient]);
 
-  const time = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
-  const date = now.toLocaleDateString([], {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
+  const time = isClient ? now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }) : "00:00";
+  const date = isClient
+    ? now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" })
+    : "";
 
   return (
     <AnimatePresence>
@@ -32,7 +35,7 @@ export function SleepScreen({ asleep, onWake }: { asleep: boolean; onWake: () =>
           className="fixed inset-0 z-50 flex cursor-pointer flex-col items-center justify-center bg-[#06080a] px-6 text-center"
         >
           <div className="absolute right-8 top-8 scale-[0.3] opacity-60">
-            <Orb state="idle" />
+            {isClient ? <Orb state="idle" /> : null}
           </div>
           <div className="font-display text-[18vw] font-thin leading-none tracking-tight text-zinc-100 sm:text-[14rem]">
             {time}
