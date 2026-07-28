@@ -80,6 +80,7 @@ export function JarvisApp() {
   const [emailDraft, setEmailDraft] = useState<{ subject: string; body: string } | null>(null);
 
   const locationRef = useRef<{ lat: number; lon: number; city?: string } | null>(null);
+  const spokenIdsRef = useRef<Set<string>>(new Set());
 
   const setVoiceId = useCallback((v: string) => {
     setVoiceIdState(v);
@@ -150,31 +151,37 @@ export function JarvisApp() {
 
   const toggleRecording = useCallback(() => {
     if (!streamRef.current) return;
+
     if (recording) {
       recorderRef.current?.stop();
-    } else {
-      chunksRef.current = [];
-      const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-        ? "video/webm;codecs=vp9"
-        : "video/webm";
-      const recorder = new MediaRecorder(streamRef.current, { mimeType });
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-      recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "video/webm" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `jarvis-recording-${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.webm`;
-        a.click();
-        URL.revokeObjectURL(url);
-        setRecording(false);
-      };
-      recorder.start();
-      recorderRef.current = recorder;
-      setRecording(true);
+      return;
     }
+
+    chunksRef.current = [];
+    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+      ? "video/webm;codecs=vp9"
+      : "video/webm";
+
+    const recorder = new MediaRecorder(streamRef.current, { mimeType });
+
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunksRef.current.push(e.data);
+    };
+
+    recorder.onstop = () => {
+      const blob = new Blob(chunksRef.current, { type: "video/webm" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `jarvis-recording-${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.webm`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setRecording(false);
+    };
+
+    recorder.start();
+    recorderRef.current = recorder;
+    setRecording(true);
   }, [recording]);
 
   const captureFrame = useCallback((): string | null => {
@@ -205,6 +212,7 @@ export function JarvisApp() {
             hour: "2-digit",
             minute: "2-digit",
           });
+
           const loc = locationRef.current;
           const clientLocation = loc
             ? loc.city
@@ -219,6 +227,7 @@ export function JarvisApp() {
               clientDate,
               clientTime,
               clientLocation,
+              includeImage: false,
             },
           };
         },
@@ -230,8 +239,6 @@ export function JarvisApp() {
     id: "jarvis-main",
     transport,
   });
-
-  const spokenIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const stored = loadStored();
@@ -246,7 +253,7 @@ export function JarvisApp() {
     setBootstrapped(true);
   }, [setMessages]);
 
-    useEffect(() => {
+  useEffect(() => {
     if (!bootstrapped) return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
@@ -254,47 +261,27 @@ export function JarvisApp() {
   }, [messages, bootstrapped]);
 
   useEffect(() => {
-    console.log("CHAT STATUS:", status);
-    console.log("RAW MESSAGES:", messages);
-    console.log(
-      "DISPLAY MESSAGES:",
-      messages.map((m) => ({
-        id: m.id,
-        role: m.role,
-        parts: m.parts,
-        text: messageToText(m),
-      })),
-    );
-  }, [messages, status]);
-
-  useEffect(() => {
     if (status !== "ready") return;
     const last = messages[messages.length - 1];
     if (!last || last.role !== "assistant") return;
     if (spokenIdsRef.current.has(last.id)) return;
+
     const text = messageToText(last);
     if (!text) return;
+
     spokenIdsRef.current.add(last.id);
     void speak(text, voiceId);
+
     const draft = extractEmailDraft(text);
     if (draft) setEmailDraft(draft);
+
     if ("Notification" in window && Notification.permission === "granted" && document.hidden) {
-      new Notification("J.A.R.V.I.S", { body: text.slice(0, 100), icon: "/favicon.ico" });
+      new Notification("J.A.R.V.I.S", {
+        body: text.slice(0, 100),
+        icon: "/favicon.ico",
+      });
     }
   }, [messages, status, speak, voiceId]);
-
-  const handleFinal = useCallback(
-    (text: string) => {
-      setInterim("");
-      void sendMessage({ text });
-    },
-    [sendMessage],
-  );
-
-  const { listening, supported, start, stop } = useSpeechRecognition({
-    onFinal: handleFinal,
-    onInterim: setInterim,
-  });
 
   useEffect(() => {
     const es = new EventSource("/api/public/n8n/stream");
@@ -309,6 +296,19 @@ export function JarvisApp() {
     return () => es.close();
   }, [speak, voiceId]);
 
+  const handleFinal = useCallback(
+    (text: string) => {
+      setInterim("");
+      void sendMessage({ text });
+    },
+    [sendMessage],
+  );
+
+  const { listening, supported, start, stop } = useSpeechRecognition({
+    onFinal: handleFinal,
+    onInterim: setInterim,
+  });
+
   const display: DisplayMessage[] = useMemo(() => {
     const fromChat: DisplayMessage[] = messages
       .map((m) => ({
@@ -316,10 +316,7 @@ export function JarvisApp() {
         role: m.role as DisplayMessage["role"],
         text: messageToText(m),
       }))
-      .filter((m, i, arr) => {
-        if (m.text) return true;
-        return arr[i]?.role === "assistant";
-      });
+      .filter((m) => m.text?.trim().length > 0);
 
     const fromN8n: DisplayMessage[] = n8nMessages.map((m) => ({
       id: `n8n-${m.id}`,
@@ -332,6 +329,7 @@ export function JarvisApp() {
   }, [messages, n8nMessages]);
 
   const thinking = status === "submitted" || status === "streaming";
+
   const orbState: OrbState = listening
     ? "listening"
     : speaking
@@ -339,6 +337,7 @@ export function JarvisApp() {
       : thinking
         ? "thinking"
         : "idle";
+
   const blockSleep = thinking || speaking || listening;
   const { idle, wake } = useIdleTimer(30_000, blockSleep);
 
@@ -397,9 +396,7 @@ export function JarvisApp() {
           <button
             onClick={toggleRecording}
             className={`absolute bottom-1 right-1 rounded-full px-2 py-0.5 text-[9px] font-bold transition ${
-              recording
-                ? "bg-red-500 text-white"
-                : "bg-white/20 text-white hover:bg-white/40"
+              recording ? "bg-red-500 text-white" : "bg-white/20 text-white hover:bg-white/40"
             }`}
           >
             {recording ? "■ STOP" : "● REC"}
@@ -415,6 +412,7 @@ export function JarvisApp() {
             J.A.R.V.I.S
           </div>
         </div>
+
         <div className="flex items-center gap-2">
           {Boolean(locationRef.current) && (
             <div
@@ -480,6 +478,7 @@ export function JarvisApp() {
               />
             </div>
           )}
+
           <div className="mt-10 text-center text-xs uppercase tracking-[0.4em] text-zinc-500">
             {orbState === "idle" && "Standing by"}
             {orbState === "listening" && "Listening..."}
@@ -520,6 +519,7 @@ export function JarvisApp() {
         webhookUrl={webhookUrl}
         onClearHistory={clearHistory}
       />
+
       <SleepScreen asleep={idle} onWake={wake} />
 
       {emailDraft && (
