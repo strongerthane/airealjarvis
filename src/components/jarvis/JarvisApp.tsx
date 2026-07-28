@@ -246,12 +246,26 @@ export function JarvisApp() {
     setBootstrapped(true);
   }, [setMessages]);
 
-  useEffect(() => {
+    useEffect(() => {
     if (!bootstrapped) return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
     } catch {}
   }, [messages, bootstrapped]);
+
+  useEffect(() => {
+    console.log("CHAT STATUS:", status);
+    console.log("RAW MESSAGES:", messages);
+    console.log(
+      "DISPLAY MESSAGES:",
+      messages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        parts: m.parts,
+        text: messageToText(m),
+      })),
+    );
+  }, [messages, status]);
 
   useEffect(() => {
     if (status !== "ready") return;
