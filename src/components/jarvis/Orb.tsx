@@ -23,19 +23,39 @@ export function Orb({ state, amplitude = 0 }: { state: "idle" | "listening" | "t
   const [status, setStatus] = useState<TrackerStatus>({ hands: 0, mode: "idle" });
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+    useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const scene = createOrbScene(container);
-    sceneRef.current = scene;
+
+    let frame = 0;
+    let cancelled = false;
+
+    const mountScene = () => {
+      if (cancelled) return;
+
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      if (!width || !height) {
+        frame = window.requestAnimationFrame(mountScene);
+        return;
+      }
+
+      const scene = createOrbScene(container);
+      sceneRef.current = scene;
+    };
+
+    frame = window.requestAnimationFrame(mountScene);
+
     return () => {
+      cancelled = true;
+      if (frame) window.cancelAnimationFrame(frame);
       trackerRef.current?.stop();
       trackerRef.current = null;
-      scene.dispose();
+      sceneRef.current?.dispose();
       sceneRef.current = null;
     };
   }, []);
-
   const stopGestures = useCallback(() => {
     trackerRef.current?.stop();
     trackerRef.current = null;
