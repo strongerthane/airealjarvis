@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect } from "react";
 
 const ACCESS_PASSWORD = "IronMohit";
