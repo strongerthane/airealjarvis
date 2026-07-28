@@ -1,108 +1,177 @@
-import { motion } from "motion/react";
+"use client";
 
-export type OrbState = "idle" | "listening" | "thinking" | "speaking";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createOrbScene, type OrbSceneApi } from "@/lib/orbScene";
+import { HandTracker, type TrackerStatus } from "@/lib/handTracker";
 
-export function Orb({ state, amplitude = 0 }: { state: OrbState; amplitude?: number }) {
-  const isIdle = state === "idle";
-  const isListening = state === "listening";
-  const isSpeaking = state === "speaking";
-  const isThinking = state === "thinking";
+type CameraState = "off" | "starting" | "on" | "error";
 
-  const scale = isSpeaking ? 1 + amplitude * 0.18 : 1;
+const MODE_LABEL: Record<TrackerStatus["mode"], string> = {
+  idle: "STANDBY",
+  spin: "SPIN",
+  zoom: "ZOOM",
+};
+
+export function Orb({ state, amplitude = 0 }: { state: "idle" | "listening" | "thinking" | "speaking"; amplitude?: number }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const overlayRef = useRef<HTMLCanvasElement>(null);
+  const sceneRef = useRef<OrbSceneApi | null>(null);
+  const trackerRef = useRef<HandTracker | null>(null);
+
+  const [camera, setCamera] = useState<CameraState>("off");
+  const [status, setStatus] = useState<TrackerStatus>({ hands: 0, mode: "idle" });
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const scene = createOrbScene(container);
+    sceneRef.current = scene;
+    return () => {
+      trackerRef.current?.stop();
+      trackerRef.current = null;
+      scene.dispose();
+      sceneRef.current = null;
+    };
+  }, []);
+
+  const stopGestures = useCallback(() => {
+    trackerRef.current?.stop();
+    trackerRef.current = null;
+    setCamera("off");
+    setStatus({ hands: 0, mode: "idle" });
+  }, []);
+
+  const startGestures = useCallback(async () => {
+    const video = videoRef.current;
+    const overlay = overlayRef.current;
+    if (!video || !overlay || trackerRef.current) return;
+
+    setCamera("starting");
+    setError(null);
+
+    const tracker = new HandTracker(video, overlay, {
+      onRotate: (dt, dp) => sceneRef.current?.rotateBy(dt, dp),
+      onZoom: (factor) => sceneRef.current?.zoomBy(factor),
+      onStatus: setStatus,
+    });
+    trackerRef.current = tracker;
+
+    try {
+      await tracker.start();
+      setCamera("on");
+    } catch (err) {
+      trackerRef.current = null;
+      tracker.stop();
+      setCamera("error");
+      setError(
+        err instanceof DOMException && err.name === "NotAllowedError"
+          ? "CAMERA ACCESS DENIED"
+          : "TRACKING INIT FAILED",
+      );
+    }
+  }, []);
+
+  const toggleGestures = useCallback(() => {
+    if (trackerRef.current) stopGestures();
+    else void startGestures();
+  }, [startGestures, stopGestures]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      switch (e.key) {
+        case "+":
+        case "=":
+          sceneRef.current?.zoomIn();
+          break;
+        case "-":
+        case "_":
+          sceneRef.current?.zoomOut();
+          break;
+        case "r":
+        case "R":
+          sceneRef.current?.resetView();
+          break;
+        case "g":
+        case "G":
+          toggleGestures();
+          break;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [toggleGestures]);
+
+  const cameraOn = camera === "on";
 
   return (
-    <div className="relative flex items-center justify-center" aria-label={`Jarvis ${state}`}>
-      {/* outer ambient glow */}
-      <motion.div
-        className="absolute rounded-full blur-3xl"
-        style={{
-          width: 360,
-          height: 360,
-          background: isIdle
-            ? "radial-gradient(circle, rgba(120,140,150,0.18), transparent 70%)"
-            : "radial-gradient(circle, rgba(20,184,166,0.45), transparent 70%)",
-        }}
-        animate={{
-          opacity: isIdle ? 0.4 : isSpeaking ? 0.7 + amplitude * 0.3 : 0.8,
-          scale: isIdle ? [0.95, 1.02, 0.95] : 1,
-        }}
-        transition={
-          isIdle
-            ? { duration: 4, repeat: Infinity, ease: "easeInOut" }
-            : { duration: 0.2 }
-        }
-      />
+    <>
+      <div ref={containerRef} className="orb-root" />
 
-      {/* listening ripples */}
-      {isListening &&
-        [0, 0.6, 1.2].map((delay) => (
-          <motion.div
-            key={delay}
-            className="absolute rounded-full border border-teal-400/40"
-            style={{ width: 220, height: 220 }}
-            initial={{ scale: 0.9, opacity: 0.7 }}
-            animate={{ scale: 1.8, opacity: 0 }}
-            transition={{ duration: 1.8, repeat: Infinity, delay, ease: "easeOut" }}
-          />
-        ))}
+      <div className="overlay-vignette" />
+      <div className="overlay-grain" />
+      <div className="overlay-scanlines" />
 
-      {/* thinking spin ring */}
-      {isThinking && (
-        <motion.div
-          className="absolute rounded-full"
-          style={{
-            width: 240,
-            height: 240,
-            border: "1px solid rgba(94,234,212,0.35)",
-            borderTopColor: "rgba(94,234,212,0.9)",
-          }}
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1.6, repeat: Infinity, ease: "linear" }}
-        />
-      )}
+      <div className="hud hud-title">J.A.R.V.I.S.</div>
 
-      {/* core orb */}
-      <motion.div
-        className="relative rounded-full"
-        style={{
-          width: 200,
-          height: 200,
-          background: isIdle
-            ? "radial-gradient(circle at 35% 30%, #5b6e72 0%, #2a3537 55%, #0f1718 100%)"
-            : "radial-gradient(circle at 35% 30%, #99f6e4 0%, #14b8a6 45%, #0f766e 85%, #042f2e 100%)",
-          boxShadow: isIdle
-            ? "inset 0 0 40px rgba(0,0,0,0.6), 0 0 30px rgba(60,80,85,0.3)"
-            : `inset 0 0 50px rgba(0,0,0,0.5), 0 0 60px rgba(20,184,166,${0.5 + amplitude * 0.4}), 0 0 120px rgba(20,184,166,${0.25 + amplitude * 0.3})`,
-        }}
-        animate={
-          isIdle
-            ? { scale: [0.98, 1.02, 0.98] }
-            : isListening
-              ? { scale: [1, 1.06, 1] }
-              : { scale }
-        }
-        transition={
-          isIdle
-            ? { duration: 4, repeat: Infinity, ease: "easeInOut" }
-            : isListening
-              ? { duration: 0.9, repeat: Infinity, ease: "easeInOut" }
-              : { duration: 0.12 }
-        }
-      >
-        {/* inner highlight */}
-        <div
-          className="absolute rounded-full"
-          style={{
-            top: "12%",
-            left: "18%",
-            width: "40%",
-            height: "28%",
-            background:
-              "radial-gradient(ellipse, rgba(255,255,255,0.35) 0%, transparent 70%)",
-            filter: "blur(8px)",
-          }}
-        />
-      </motion.div>
-    </div>
+      <div className="hud hud-hint">
+        <div>
+          <span className="key">DRAG</span> spin&nbsp;&nbsp;
+          <span className="key">SCROLL</span> zoom
+        </div>
+        {cameraOn ? (
+          <div>
+            <span className="key">PINCH + MOVE</span> spin&nbsp;&nbsp;
+            <span className="key">PINCH BOTH HANDS ± SPREAD</span> zoom
+          </div>
+        ) : (
+          <div>
+            <span className="key">G</span> hand gestures&nbsp;&nbsp;
+            <span className="key">R</span> reset&nbsp;&nbsp;
+            <span className="key">+/−</span> zoom
+          </div>
+        )}
+      </div>
+
+      <div className="hud hud-controls">
+        <div className={`camera-panel${cameraOn ? " visible" : ""}`}>
+          {/* Mirrored preview so it behaves like a mirror */}
+          <video ref={videoRef} muted playsInline className="camera-video" />
+          <canvas ref={overlayRef} width={208} height={156} className="camera-overlay" />
+          <div className="camera-status">
+            {status.hands > 0
+              ? `${status.hands} HAND${status.hands > 1 ? "S" : ""} · ${MODE_LABEL[status.mode]}`
+              : "SHOW HANDS"}
+          </div>
+        </div>
+
+        {error && <div className="hud-error">{error}</div>}
+
+        <div className="hud-row">
+          <button
+            type="button"
+            className="hud-btn"
+            aria-pressed={cameraOn}
+            onClick={toggleGestures}
+            disabled={camera === "starting"}
+          >
+            {camera === "starting" ? "INITIALIZING…" : cameraOn ? "GESTURES ON" : "GESTURES OFF"}
+          </button>
+        </div>
+        <div className="hud-row">
+          <button type="button" className="hud-btn" onClick={() => sceneRef.current?.zoomIn()} aria-label="Zoom in">
+            +
+          </button>
+          <button type="button" className="hud-btn" onClick={() => sceneRef.current?.zoomOut()} aria-label="Zoom out">
+            −
+          </button>
+          <button type="button" className="hud-btn" onClick={() => sceneRef.current?.resetView()}>
+            RESET
+          </button>
+        </div>
+      </div>
+    </>
   );
 }
+

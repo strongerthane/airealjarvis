@@ -33,10 +33,12 @@ export function useTTS() {
   const speak = useCallback(
     async (text: string, voiceId?: string) => {
       if (!text.trim()) return;
-      try {
-        // Stop any in-flight playback
-        audioRef.current?.pause();
 
+      // Stop any in-flight playback
+      audioRef.current?.pause();
+
+      // Primary: server-side TTS (ElevenLabs). Fallback: browser SpeechSynthesis.
+      try {
         const res = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -79,8 +81,29 @@ export function useTTS() {
         audio.onerror = end;
         await audio.play();
       } catch (err) {
-        console.error("TTS error", err);
-        setSpeaking(false);
+        // Fallback to browser SpeechSynthesis to avoid a hard failure in dev/no-key environments
+        try {
+          console.warn("Server TTS failed, falling back to SpeechSynthesis", err);
+          if ((window as any).speechSynthesis) {
+            const utter = new SpeechSynthesisUtterance(text);
+            // Optionally select a voice by name/id if available
+            if (voiceId) {
+              const voices = (window as any).speechSynthesis.getVoices();
+              const match = voices.find((v: any) => v.voiceURI === voiceId || v.name === voiceId || v.lang === voiceId);
+              if (match) utter.voice = match;
+            }
+            utter.onstart = () => setSpeaking(true);
+            utter.onend = () => setSpeaking(false);
+            utter.onerror = () => setSpeaking(false);
+            (window as any).speechSynthesis.cancel();
+            (window as any).speechSynthesis.speak(utter);
+          } else {
+            setSpeaking(false);
+          }
+        } catch (e) {
+          console.error("TTS fallback failed", e);
+          setSpeaking(false);
+        }
       }
     },
     [tick],
