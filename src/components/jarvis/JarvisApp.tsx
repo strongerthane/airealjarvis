@@ -9,7 +9,6 @@ import { useIdleTimer } from "@/hooks/useIdleTimer";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useTTS } from "@/hooks/useTTS";
 
-import { ChatPanel, type DisplayMessage } from "./ChatPanel";
 import { EmailDraftModal } from "./EmailDraftModal";
 import { InputBar } from "./InputBar";
 import { Orb, type OrbState } from "./Orb";
@@ -37,7 +36,6 @@ function loadStored(): UIMessage[] {
 
 function messageToText(m: UIMessage): string {
   if (!Array.isArray(m.parts)) return "";
-
   return m.parts
     .map((p: any) => {
       if (!p) return "";
@@ -54,8 +52,7 @@ function extractEmailDraft(text: string): { subject: string; body: string } | nu
   const hasEmailKeywords = /dear |hi |hello |regards|sincerely|best regards|to whom/i.test(text);
   if (!subjectMatch && !hasEmailKeywords) return null;
   const subject = subjectMatch ? subjectMatch[1].trim() : "Email Draft";
-  const body = text;
-  return { subject, body };
+  return { subject, body: text };
 }
 
 type InboxEntry = { id: string; text: string };
@@ -70,24 +67,64 @@ export function JarvisApp() {
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   const [recording, setRecording] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
-  const [emailDraft, setEmailDraft] = useState<{ subject: string; body: string } | null>(null);
+  const [emailDraft, setEmailDraft] = useState<{ subject: string; body: string } | null>({
+    subject: "Email Draft",
+    body: "Tell me who this email is for and what you want to say.",
+  });
 
   const locationRef = useRef<{ lat: number; lon: number; city?: string } | null>(null);
   const spokenIdsRef = useRef<Set<string>>(new Set());
+  const spokenSentenceCountRef = useRef<Record<string, number>>({});
+  const speakingQueueRef = useRef<string[]>([]);
+  const queueBusyRef = useRef(false);
 
   const setVoiceId = useCallback((v: string) => {
     setVoiceIdState(v);
     localStorage.setItem(VOICE_KEY, v);
   }, []);
 
+  const openEmailDraft = useCallback((draft?: Partial<{ subject: string; body: string }>) => {
+    setEmailDraft({
+      subject: draft?.subject?.trim() || "Email Draft",
+      body: draft?.body?.trim() || "Tell me who this email is for and what you want to say.",
+    });
+  }, []);
+
   const { speak, stop: stopSpeaking, speaking, amplitude } = useTTS();
+
+  const splitCompleteSentences = useCallback((text: string) => {
+    const clean = text.replace(/\s+/g, " ").trim();
+    if (!clean) return [];
+    const matches = clean.match(/[^.!?]+[.!?]+/g);
+    return matches ? matches.map((s) => s.trim()) : [];
+  }, []);
+
+  const playQueue = useCallback(async () => {
+    if (queueBusyRef.current) return;
+    queueBusyRef.current = true;
+    try {
+      while (speakingQueueRef.current.length > 0) {
+        const next = speakingQueueRef.current.shift();
+        if (!next) continue;
+        await speak(next, voiceId);
+      }
+    } finally {
+      queueBusyRef.current = false;
+    }
+  }, [speak, voiceId]);
+
+  useEffect(() => {
+    return () => {
+      speakingQueueRef.current = [];
+      queueBusyRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -128,24 +165,26 @@ export function JarvisApp() {
       streamRef.current = null;
       setCameraOn(false);
       setCameraError(null);
-    } else {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" },
-          audio: true,
-        });
-        streamRef.current = stream;
-        setCameraOn(true);
-        setCameraError(null);
-        setTimeout(() => {
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            videoRef.current.play().catch(() => {});
-          }
-        }, 100);
-      } catch {
-        setCameraError("Camera access denied.");
-      }
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+        audio: true,
+      });
+      streamRef.current = stream;
+      setCameraOn(true);
+      setCameraError(null);
+
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+      }, 100);
+    } catch {
+      setCameraError("Camera access denied.");
     }
   }, [cameraOn, recording]);
 
@@ -183,18 +222,6 @@ export function JarvisApp() {
     recorderRef.current = recorder;
     setRecording(true);
   }, [recording]);
-
-  const captureFrame = useCallback((): string | null => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas || !cameraOn) return null;
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-    ctx.drawImage(video, 0, 0);
-    return canvas.toDataURL("image/jpeg", 0.7).split(",")[1];
-  }, [cameraOn]);
 
   const transport = useMemo(
     () =>
@@ -248,8 +275,10 @@ export function JarvisApp() {
         if (m.role === "assistant") spokenIdsRef.current.add(m.id);
       }
     }
+
     const v = localStorage.getItem(VOICE_KEY);
     if (v) setVoiceIdState(v);
+
     setBootstrapped(true);
   }, [setMessages]);
 
@@ -261,40 +290,57 @@ export function JarvisApp() {
   }, [messages, bootstrapped]);
 
   useEffect(() => {
-    if (status !== "ready") return;
     const last = messages[messages.length - 1];
     if (!last || last.role !== "assistant") return;
-    if (spokenIdsRef.current.has(last.id)) return;
 
     const text = messageToText(last);
     if (!text) return;
 
-    spokenIdsRef.current.add(last.id);
-    void speak(text, voiceId);
+    const completeSentences = splitCompleteSentences(text);
+    const alreadySpoken = spokenSentenceCountRef.current[last.id] ?? 0;
 
-    const draft = extractEmailDraft(text);
-    if (draft) setEmailDraft(draft);
+    if (completeSentences.length > alreadySpoken) {
+      const newSentences = completeSentences.slice(alreadySpoken);
 
-    if ("Notification" in window && Notification.permission === "granted" && document.hidden) {
-      new Notification("J.A.R.V.I.S", {
-        body: text.slice(0, 100),
-        icon: "/favicon.ico",
-      });
+      for (const sentence of newSentences) {
+        const trimmed = sentence.trim();
+        if (trimmed) speakingQueueRef.current.push(trimmed);
+      }
+
+      spokenSentenceCountRef.current[last.id] = completeSentences.length;
+      void playQueue();
     }
-  }, [messages, status, speak, voiceId]);
+
+    if (status === "ready" && !spokenIdsRef.current.has(last.id)) {
+      spokenIdsRef.current.add(last.id);
+
+      const draft = extractEmailDraft(text);
+      if (draft) openEmailDraft(draft);
+
+      if ("Notification" in window && Notification.permission === "granted" && document.hidden) {
+        new Notification("J.A.R.V.I.S", {
+          body: text.slice(0, 100),
+          icon: "/favicon.ico",
+        });
+      }
+    }
+  }, [messages, status, splitCompleteSentences, playQueue, openEmailDraft]);
 
   useEffect(() => {
     const es = new EventSource("/api/public/n8n/stream");
+
     es.onmessage = (ev) => {
       try {
         const data = JSON.parse(ev.data) as { id: string; text: string };
         if (!data?.id || !data?.text) return;
         setN8nMessages((cur) => [...cur, { id: data.id, text: data.text }]);
-        void speak(data.text, voiceId);
+        speakingQueueRef.current.push(data.text);
+        void playQueue();
       } catch {}
     };
+
     return () => es.close();
-  }, [speak, voiceId]);
+  }, [playQueue]);
 
   const handleFinal = useCallback(
     (text: string) => {
@@ -309,27 +355,7 @@ export function JarvisApp() {
     onInterim: setInterim,
   });
 
-  const display: DisplayMessage[] = useMemo(() => {
-    const fromChat: DisplayMessage[] = messages
-      .map((m) => ({
-        id: m.id,
-        role: m.role as DisplayMessage["role"],
-        text: messageToText(m),
-      }))
-      .filter((m) => m.text?.trim().length > 0);
-
-    const fromN8n: DisplayMessage[] = n8nMessages.map((m) => ({
-      id: `n8n-${m.id}`,
-      role: "assistant" as const,
-      text: m.text,
-      source: "n8n",
-    }));
-
-    return [...fromChat, ...fromN8n];
-  }, [messages, n8nMessages]);
-
   const thinking = status === "submitted" || status === "streaming";
-
   const orbState: OrbState = listening
     ? "listening"
     : speaking
@@ -348,6 +374,8 @@ export function JarvisApp() {
 
   const onSend = useCallback(
     (text: string) => {
+      speakingQueueRef.current = [];
+      spokenSentenceCountRef.current = {};
       void sendMessage({ text });
     },
     [sendMessage],
@@ -362,6 +390,8 @@ export function JarvisApp() {
     setMessages([]);
     setN8nMessages([]);
     spokenIdsRef.current = new Set();
+    spokenSentenceCountRef.current = {};
+    speakingQueueRef.current = [];
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {}
@@ -386,114 +416,98 @@ export function JarvisApp() {
 
       {cameraOn && (
         <div
-          className="absolute top-16 left-4 z-30 rounded-lg overflow-hidden border border-teal-500/30 shadow-lg"
+          className="absolute left-6 top-24 z-40 overflow-hidden rounded-lg border border-teal-500/30 bg-black/20 shadow-lg backdrop-blur-sm"
           style={{ width: 180, height: 135 }}
         >
-          <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
+          <video ref={videoRef} autoPlay muted playsInline className="h-full w-full object-cover" />
           {recording && (
-            <div className="absolute top-1 right-1 bg-red-500 rounded-full w-2 h-2 animate-pulse" />
+            <div className="absolute right-1 top-1 h-2 w-2 animate-pulse rounded-full bg-red-500" />
           )}
           <button
+            type="button"
             onClick={toggleRecording}
             className={`absolute bottom-1 right-1 rounded-full px-2 py-0.5 text-[9px] font-bold transition ${
               recording ? "bg-red-500 text-white" : "bg-white/20 text-white hover:bg-white/40"
             }`}
           >
-            {recording ? "■ STOP" : "● REC"}
+            {recording ? "STOP" : "REC"}
           </button>
         </div>
       )}
-      <canvas ref={canvasRef} className="hidden" />
 
-      <header className="relative z-10 flex items-center justify-between px-6 py-4">
-        <div className="flex items-center gap-3">
+      <div className="absolute inset-x-0 top-0 z-40 flex items-start justify-between px-6 py-4">
+        <div className="flex items-center gap-3 rounded-full border border-white/10 bg-black/25 px-4 py-2 backdrop-blur-md">
           <div className="h-2 w-2 rounded-full bg-teal-400 shadow-[0_0_10px_rgba(20,184,166,0.9)]" />
           <div className="font-display text-sm uppercase tracking-[0.5em] text-teal-200">
             J.A.R.V.I.S
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {Boolean(locationRef.current) && (
-            <div
-              title="Location acquired"
-              className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1"
-            >
+            <div className="flex items-center gap-1 rounded-full border border-white/10 bg-black/25 px-3 py-2 backdrop-blur-md">
               <MapPin className="h-3 w-3 text-teal-400" />
-              <span className="text-[10px] text-zinc-400">
+              <span className="text-[10px] text-zinc-300">
                 {locationRef.current?.city ?? "Located"}
               </span>
             </div>
           )}
 
           <button
-            onClick={() => void sendMessage({ text: "Draft an email for me" })}
+            type="button"
+            onClick={() => openEmailDraft()}
             title="Draft an email"
-            className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-zinc-400 hover:bg-white/10 transition"
+            className="flex items-center gap-1 rounded-full border border-white/10 bg-black/25 px-3 py-2 text-[10px] text-zinc-300 backdrop-blur-md transition hover:bg-white/10"
           >
             <Mail className="h-3 w-3" />
             <span>EMAIL</span>
           </button>
 
           <button
+            type="button"
             onClick={toggleCamera}
             title={cameraOn ? "Disable camera" : "Enable camera"}
-            className={`flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] transition ${
+            className={`flex items-center gap-1 rounded-full border px-3 py-2 text-[10px] backdrop-blur-md transition ${
               cameraOn
                 ? "border-teal-500/50 bg-teal-500/10 text-teal-300"
-                : "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10"
+                : "border-white/10 bg-black/25 text-zinc-300 hover:bg-white/10"
             }`}
           >
             {cameraOn ? <Camera className="h-3 w-3" /> : <CameraOff className="h-3 w-3" />}
             <span>{cameraOn ? "CAM ON" : "CAM"}</span>
           </button>
 
-          {cameraError && <span className="text-[10px] text-red-400">{cameraError}</span>}
-
           <button
+            type="button"
             onClick={() => setSettingsOpen(true)}
-            className="rounded-full border border-white/10 bg-white/5 p-2 text-zinc-300 hover:bg-white/10"
+            className="rounded-full border border-white/10 bg-black/25 p-2 text-zinc-300 backdrop-blur-md hover:bg-white/10"
             title="Settings"
           >
             <Settings className="h-4 w-4" />
           </button>
         </div>
-      </header>
+      </div>
 
-      <main className="relative z-10 mx-auto grid w-full max-w-6xl grid-cols-1 gap-6 px-4 pb-32 lg:grid-cols-[1fr_400px] lg:gap-8 lg:px-8">
-        <section className="flex min-h-[55vh] flex-col items-center justify-center py-8 lg:min-h-[calc(100vh-12rem)]">
-          {typeof window !== "undefined" ? (
-            <Orb state={orbState} amplitude={amplitude} />
-          ) : (
-            <div style={{ width: 420, height: 420 }} aria-hidden>
-              <div
-                style={{
-                  width: 200,
-                  height: 200,
-                  margin: "0 auto",
-                  borderRadius: 9999,
-                  background:
-                    "radial-gradient(circle at 30% 28%, #9fbafc 0%, #3b82f6 40%, #0f172a 95%)",
-                }}
-              />
-            </div>
-          )}
+      {cameraError && (
+        <div className="absolute right-6 top-20 z-40 text-[10px] uppercase tracking-[0.2em] text-red-400">
+          {cameraError}
+        </div>
+      )}
 
-          <div className="mt-10 text-center text-xs uppercase tracking-[0.4em] text-zinc-500">
+      <main className="relative z-10 flex min-h-screen w-full items-center justify-center overflow-hidden">
+        <section className="relative flex h-screen w-full flex-col items-center justify-center">
+          <Orb state={orbState} amplitude={amplitude} />
+          <div className="pointer-events-none absolute bottom-28 left-1/2 -translate-x-1/2 text-center text-xs uppercase tracking-[0.4em] text-zinc-500">
             {orbState === "idle" && "Standing by"}
             {orbState === "listening" && "Listening..."}
             {orbState === "thinking" && "Processing"}
             {orbState === "speaking" && "Responding"}
           </div>
         </section>
-
-        <aside className="h-[55vh] lg:h-[calc(100vh-12rem)]">
-          <ChatPanel messages={display} thinking={thinking} />
-        </aside>
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 z-20 px-4 pb-6 pt-4">
-        <div className="mx-auto max-w-3xl">
+      <div className="fixed inset-x-0 bottom-0 z-40 px-4 pb-6 pt-4">
+        <div className="mx-auto max-w-4xl">
           <InputBar
             onSend={onSend}
             listening={listening}

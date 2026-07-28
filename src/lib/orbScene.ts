@@ -551,9 +551,7 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
     controls.update();
   }
 
-  const timer = new THREE.Timer();
-  timer.connect(document);
-  timer.start();
+  const clock = new THREE.Clock();
 
   let flickerTimer = 0;
   let rafId = 0;
@@ -563,8 +561,7 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
     if (disposed) return;
     rafId = requestAnimationFrame(animate);
 
-    timer.update();
-    const t = timer.getElapsed();
+    const t = clock.getElapsedTime();
 
     outerShell.rotation.y += 0.0015;
     outerShell.rotation.x = Math.sin(t * 0.08) * 0.05;

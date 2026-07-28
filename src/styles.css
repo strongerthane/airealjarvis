@@ -385,3 +385,210 @@
     display: none;
   }
 }
+.orb-root {
+  cursor: grab;
+}
+
+.orb-root:active {
+  cursor: grabbing;
+}
+
+.orb-root canvas {
+  display: block;
+}
+
+.overlay-grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 150px;
+  mix-blend-mode: screen;
+}
+
+.overlay-scanlines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 11;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 2px,
+    rgba(0, 0, 0, 0.15) 2px,
+    rgba(0, 0, 0, 0.15) 4px
+  );
+  opacity: 0.22;
+}
+
+.overlay-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9;
+  background: radial-gradient(ellipse at center, transparent 42%, rgba(0, 0, 0, 0.45) 100%);
+}
+
+.jarvis-hud {
+  position: absolute;
+  z-index: 20;
+  color: #93c5fd;
+  font-family: "Courier New", monospace;
+  user-select: none;
+  text-shadow: 0 0 10px rgba(147, 197, 253, 0.35);
+}
+
+.jarvis-hud-title {
+  top: 16px;
+  left: 16px;
+  font-size: 12px;
+  letter-spacing: 0.35em;
+  opacity: 0.78;
+  pointer-events: none;
+}
+
+.jarvis-hud-title::after {
+  content: "";
+  display: block;
+  margin-top: 6px;
+  width: 120px;
+  height: 1px;
+  background: linear-gradient(to right, rgba(147, 197, 253, 0.8), transparent);
+}
+
+.jarvis-hud-hint {
+  bottom: 16px;
+  left: 16px;
+  font-size: 11px;
+  line-height: 1.7;
+  letter-spacing: 0.08em;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.jarvis-key {
+  display: inline-block;
+  padding: 0 4px;
+  margin-right: 4px;
+  border: 1px solid rgba(147, 197, 253, 0.45);
+  border-radius: 3px;
+  font-size: 10px;
+}
+
+.jarvis-hud-controls {
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.jarvis-hud-row {
+  display: flex;
+  gap: 8px;
+}
+
+.jarvis-hud-btn {
+  min-width: 44px;
+  height: 44px;
+  padding: 0 12px;
+  background: rgba(10, 18, 32, 0.6);
+  border: 1px solid rgba(147, 197, 253, 0.35);
+  border-radius: 4px;
+  color: #bfdbfe;
+  font-family: "Courier New", monospace;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  backdrop-filter: blur(2px);
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.1) inset;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.jarvis-hud-btn:hover {
+  background: rgba(20, 35, 60, 0.78);
+  border-color: rgba(191, 219, 254, 0.8);
+  box-shadow: 0 0 14px rgba(96, 165, 250, 0.2), 0 0 12px rgba(59, 130, 246, 0.15) inset;
+}
+
+.jarvis-hud-btn:active {
+  background: rgba(30, 58, 95, 0.85);
+}
+
+.jarvis-hud-btn[aria-pressed="true"] {
+  background: rgba(30, 64, 175, 0.35);
+  border-color: #93c5fd;
+  color: #dbeafe;
+}
+
+.jarvis-hud-error {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: #fca5a5;
+}
+
+.jarvis-camera-panel {
+  position: relative;
+  width: 208px;
+  height: 156px;
+  display: none;
+  overflow: hidden;
+  border: 1px solid rgba(147, 197, 253, 0.4);
+  border-radius: 6px;
+  background: #08111d;
+  box-shadow: 0 0 16px rgba(59, 130, 246, 0.12);
+}
+
+.jarvis-camera-panel.visible {
+  display: block;
+}
+
+.jarvis-camera-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+  filter: saturate(0.75) hue-rotate(180deg) brightness(0.72) contrast(1.05);
+  opacity: 0.88;
+}
+
+.jarvis-camera-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.jarvis-camera-status {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 3px 6px;
+  background: rgba(8, 17, 29, 0.72);
+  color: #bfdbfe;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+}
+
+@media (max-width: 640px) {
+  .jarvis-hud-hint {
+    display: none;
+  }
+
+  .jarvis-hud-controls {
+    right: 8px;
+    bottom: 8px;
+  }
+
+  .jarvis-hud-title {
+    top: 8px;
+    left: 8px;
+  }
+}
