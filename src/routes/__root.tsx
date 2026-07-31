@@ -10,7 +10,6 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
 
 function NotFoundComponent() {
   return (
@@ -38,7 +37,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
   useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    console.error("Root error boundary:", error);
   }, [error]);
 
   return (
@@ -79,12 +78,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "J.A.R.V.I.S — AI Assistant" },
       { name: "description", content: "A dark, sleek voice-enabled AI assistant with live chat, speech, and webhook alerts." },
-      { name: "author", content: "Lovable" },
       { property: "og:title", content: "J.A.R.V.I.S — AI Assistant" },
       { property: "og:description", content: "A dark, sleek voice-enabled AI assistant with live chat, speech, and webhook alerts." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:site", content: "@IronMohit360" },
       { name: "twitter:title", content: "J.A.R.V.I.S — AI Assistant" },
       { name: "twitter:description", content: "A dark, sleek voice-enabled AI assistant with live chat, speech, and webhook alerts." },
       { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/1127675f-9d20-40b3-bd69-138d75a17ffc" },
