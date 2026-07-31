@@ -4,113 +4,136 @@ export function useTTS() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ctxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const dataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
+  const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const dataRef = useRef<Uint8Array | null>(null);
   const rafRef = useRef<number | null>(null);
+
   const [speaking, setSpeaking] = useState(false);
   const [amplitude, setAmplitude] = useState(0);
 
   useEffect(() => {
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
       audioRef.current?.pause();
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      try {
+        sourceRef.current?.disconnect();
+        sourceRef.current = null;
+      } catch {}
+      try {
+        analyserRef.current?.disconnect();
+        analyserRef.current = null;
+      } catch {}
       ctxRef.current?.close().catch(() => {});
+      ctxRef.current = null;
     };
   }, []);
 
   const tick = useCallback(() => {
-    if (!analyserRef.current || !dataRef.current) return;
-    analyserRef.current.getByteTimeDomainData(dataRef.current);
+    const analyser = analyserRef.current;
+    const data = dataRef.current;
+    if (!analyser || !data) return;
+    analyser.getByteTimeDomainData(data);
     let sum = 0;
-    for (let i = 0; i < dataRef.current.length; i++) {
-      const v = (dataRef.current[i] - 128) / 128;
+    for (let i = 0; i < data.length; i++) {
+      const v = (data[i] - 128) / 128;
       sum += v * v;
     }
-    const rms = Math.sqrt(sum / dataRef.current.length);
+    const rms = Math.sqrt(sum / data.length);
     setAmplitude(Math.min(1, rms * 3));
     rafRef.current = requestAnimationFrame(tick);
   }, []);
 
   const speak = useCallback(
     async (text: string, voiceId?: string) => {
-      if (!text.trim()) return;
+      const clean = text.trim();
+      if (!clean) return;
 
-      // Stop any in-flight playback
       audioRef.current?.pause();
+      if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+      setSpeaking(false);
+      setAmplitude(0);
 
-      // Primary: server-side TTS (ElevenLabs). Fallback: browser SpeechSynthesis.
-      try {
-        const res = await fetch("/api/tts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, voiceId }),
-        });
-        if (!res.ok) throw new Error(`TTS ${res.status}`);
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: clean, voiceId }),
+      });
 
-        const audio = new Audio(url);
-        audio.crossOrigin = "anonymous";
-        audioRef.current = audio;
+      if (!res.ok) {
+        let hint = "";
+        try { hint = await res.text(); } catch {}
+        throw new Error(`TTS server returned ${res.status}: ${hint}`);
+      }
 
-        if (!ctxRef.current) {
-          ctxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-        }
-        const ctx = ctxRef.current;
-        if (ctx.state === "suspended") await ctx.resume().catch(() => {});
+      const blob = await res.blob();
+      if (blob.size === 0) throw new Error("TTS returned empty audio");
 
-        const source = ctx.createMediaElementSource(audio);
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 512;
-        source.connect(analyser);
-        analyser.connect(ctx.destination);
-        analyserRef.current = analyser;
-        dataRef.current = new Uint8Array(new ArrayBuffer(analyser.fftSize));
+      const url = URL.createObjectURL(blob);
+
+      if (!ctxRef.current) {
+        ctxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = ctxRef.current;
+      if (ctx.state === "suspended") await ctx.resume().catch(() => {});
+
+      if (sourceRef.current) { try { sourceRef.current.disconnect(); } catch {} }
+      if (analyserRef.current) { try { analyserRef.current.disconnect(); } catch {} }
+
+      const audio = new Audio(url);
+      audio.crossOrigin = "anonymous";
+      audioRef.current = audio;
+
+      const source = ctx.createMediaElementSource(audio);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      analyser.connect(ctx.destination);
+      sourceRef.current = source;
+      analyserRef.current = analyser;
+      dataRef.current = new Uint8Array(analyser.fftSize);
+
+      await new Promise<void>(async (resolve, reject) => {
+        let resolved = false;
+        const finish = () => {
+          if (resolved) return;
+          resolved = true;
+          if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+          setSpeaking(false);
+          setAmplitude(0);
+          URL.revokeObjectURL(url);
+          resolve();
+        };
+        const fail = (e: unknown) => {
+          if (resolved) return;
+          resolved = true;
+          if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+          setSpeaking(false);
+          setAmplitude(0);
+          URL.revokeObjectURL(url);
+          reject(e);
+        };
 
         audio.onplay = () => {
           setSpeaking(true);
           if (rafRef.current) cancelAnimationFrame(rafRef.current);
           tick();
         };
-        const end = () => {
-          setSpeaking(false);
-          setAmplitude(0);
-          if (rafRef.current) cancelAnimationFrame(rafRef.current);
-          URL.revokeObjectURL(url);
-        };
-        audio.onended = end;
-        audio.onerror = end;
-        await audio.play();
-      } catch (err) {
-        // Fallback to browser SpeechSynthesis to avoid a hard failure in dev/no-key environments
+        audio.onended = finish;
+        audio.onerror = () => fail(new Error("Audio playback failed"));
+
         try {
-          console.warn("Server TTS failed, falling back to SpeechSynthesis", err);
-          if ((window as any).speechSynthesis) {
-            const utter = new SpeechSynthesisUtterance(text);
-            // Optionally select a voice by name/id if available
-            if (voiceId) {
-              const voices = (window as any).speechSynthesis.getVoices();
-              const match = voices.find((v: any) => v.voiceURI === voiceId || v.name === voiceId || v.lang === voiceId);
-              if (match) utter.voice = match;
-            }
-            utter.onstart = () => setSpeaking(true);
-            utter.onend = () => setSpeaking(false);
-            utter.onerror = () => setSpeaking(false);
-            (window as any).speechSynthesis.cancel();
-            (window as any).speechSynthesis.speak(utter);
-          } else {
-            setSpeaking(false);
-          }
+          await audio.play();
         } catch (e) {
-          console.error("TTS fallback failed", e);
-          setSpeaking(false);
+          fail(e);
         }
-      }
+      });
     },
     [tick],
   );
 
   const stop = useCallback(() => {
     audioRef.current?.pause();
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
     setSpeaking(false);
     setAmplitude(0);
   }, []);

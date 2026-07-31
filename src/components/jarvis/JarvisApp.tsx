@@ -9,6 +9,7 @@ import { useIdleTimer } from "@/hooks/useIdleTimer";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useTTS } from "@/hooks/useTTS";
 
+import { ChatPanel, type DisplayMessage } from "./ChatPanel";
 import { EmailDraftModal } from "./EmailDraftModal";
 import { InputBar } from "./InputBar";
 import { Orb, type OrbState } from "./Orb";
@@ -73,10 +74,7 @@ export function JarvisApp() {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
-  const [emailDraft, setEmailDraft] = useState<{ subject: string; body: string } | null>({
-    subject: "Email Draft",
-    body: "Tell me who this email is for and what you want to say.",
-  });
+  const [emailDraft, setEmailDraft] = useState<{ subject: string; body: string } | null>(null);
 
   const locationRef = useRef<{ lat: number; lon: number; city?: string } | null>(null);
   const spokenIdsRef = useRef<Set<string>>(new Set());
@@ -114,6 +112,8 @@ export function JarvisApp() {
         if (!next) continue;
         await speak(next, voiceId);
       }
+    } catch (err) {
+      console.warn("TTS queue aborted", err);
     } finally {
       queueBusyRef.current = false;
     }
@@ -134,12 +134,8 @@ export function JarvisApp() {
         const lon = pos.coords.longitude;
         let city: string | undefined;
         try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
-          );
-          const data = (await res.json()) as {
-            address?: { city?: string; town?: string; village?: string };
-          };
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
+          const data = (await res.json()) as { address?: { city?: string; town?: string; village?: string } };
           city = data.address?.city ?? data.address?.town ?? data.address?.village;
         } catch {}
         locationRef.current = { lat, lon, city };
@@ -167,7 +163,6 @@ export function JarvisApp() {
       setCameraError(null);
       return;
     }
-
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment" },
@@ -176,7 +171,6 @@ export function JarvisApp() {
       streamRef.current = stream;
       setCameraOn(true);
       setCameraError(null);
-
       setTimeout(() => {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -190,23 +184,18 @@ export function JarvisApp() {
 
   const toggleRecording = useCallback(() => {
     if (!streamRef.current) return;
-
     if (recording) {
       recorderRef.current?.stop();
       return;
     }
-
     chunksRef.current = [];
     const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
       ? "video/webm;codecs=vp9"
       : "video/webm";
-
     const recorder = new MediaRecorder(streamRef.current, { mimeType });
-
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) chunksRef.current.push(e.data);
     };
-
     recorder.onstop = () => {
       const blob = new Blob(chunksRef.current, { type: "video/webm" });
       const url = URL.createObjectURL(blob);
@@ -217,7 +206,6 @@ export function JarvisApp() {
       URL.revokeObjectURL(url);
       setRecording(false);
     };
-
     recorder.start();
     recorderRef.current = recorder;
     setRecording(true);
@@ -230,33 +218,16 @@ export function JarvisApp() {
         prepareSendMessagesRequest: ({ body, messages }) => {
           const now = new Date();
           const clientDate = now.toLocaleDateString("en-GB", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
+            weekday: "long", year: "numeric", month: "long", day: "numeric",
           });
           const clientTime = now.toLocaleTimeString("en-GB", {
-            hour: "2-digit",
-            minute: "2-digit",
+            hour: "2-digit", minute: "2-digit",
           });
-
           const loc = locationRef.current;
           const clientLocation = loc
-            ? loc.city
-              ? `${loc.city} (${loc.lat.toFixed(2)}, ${loc.lon.toFixed(2)})`
-              : `${loc.lat.toFixed(2)}, ${loc.lon.toFixed(2)}`
+            ? loc.city ? `${loc.city} (${loc.lat.toFixed(2)}, ${loc.lon.toFixed(2)})` : `${loc.lat.toFixed(2)}, ${loc.lon.toFixed(2)}`
             : null;
-
-          return {
-            body: {
-              ...body,
-              messages,
-              clientDate,
-              clientTime,
-              clientLocation,
-              includeImage: false,
-            },
-          };
+          return { body: { ...body, messages, clientDate, clientTime, clientLocation, includeImage: false } };
         },
       }),
     [],
@@ -275,18 +246,14 @@ export function JarvisApp() {
         if (m.role === "assistant") spokenIdsRef.current.add(m.id);
       }
     }
-
     const v = localStorage.getItem(VOICE_KEY);
     if (v) setVoiceIdState(v);
-
     setBootstrapped(true);
   }, [setMessages]);
 
   useEffect(() => {
     if (!bootstrapped) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
-    } catch {}
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); } catch {}
   }, [messages, bootstrapped]);
 
   useEffect(() => {
@@ -301,34 +268,24 @@ export function JarvisApp() {
 
     if (completeSentences.length > alreadySpoken) {
       const newSentences = completeSentences.slice(alreadySpoken);
-
       for (const sentence of newSentences) {
         const trimmed = sentence.trim();
         if (trimmed) speakingQueueRef.current.push(trimmed);
       }
-
       spokenSentenceCountRef.current[last.id] = completeSentences.length;
       void playQueue();
     }
 
     if (status === "ready" && !spokenIdsRef.current.has(last.id)) {
       spokenIdsRef.current.add(last.id);
-
-      const draft = extractEmailDraft(text);
-      if (draft) openEmailDraft(draft);
-
       if ("Notification" in window && Notification.permission === "granted" && document.hidden) {
-        new Notification("J.A.R.V.I.S", {
-          body: text.slice(0, 100),
-          icon: "/favicon.ico",
-        });
+        new Notification("J.A.R.V.I.S", { body: text.slice(0, 100), icon: "/favicon.ico" });
       }
     }
-  }, [messages, status, splitCompleteSentences, playQueue, openEmailDraft]);
+  }, [messages, status, splitCompleteSentences, playQueue]);
 
   useEffect(() => {
     const es = new EventSource("/api/public/n8n/stream");
-
     es.onmessage = (ev) => {
       try {
         const data = JSON.parse(ev.data) as { id: string; text: string };
@@ -338,7 +295,6 @@ export function JarvisApp() {
         void playQueue();
       } catch {}
     };
-
     return () => es.close();
   }, [playQueue]);
 
@@ -354,6 +310,19 @@ export function JarvisApp() {
     onFinal: handleFinal,
     onInterim: setInterim,
   });
+
+  const display: DisplayMessage[] = useMemo(() => {
+    const fromChat = messages
+      .map((m) => ({ id: m.id, role: m.role as DisplayMessage["role"], text: messageToText(m) }))
+      .filter((m) => m.text);
+    const fromN8n: DisplayMessage[] = n8nMessages.map((m) => ({
+      id: `n8n-${m.id}`,
+      role: "assistant" as const,
+      text: m.text,
+      source: "n8n",
+    }));
+    return [...fromChat, ...fromN8n];
+  }, [messages, n8nMessages]);
 
   const thinking = status === "submitted" || status === "streaming";
   const orbState: OrbState = listening
@@ -392,9 +361,7 @@ export function JarvisApp() {
     spokenIdsRef.current = new Set();
     spokenSentenceCountRef.current = {};
     speakingQueueRef.current = [];
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {}
+    try { localStorage.removeItem(STORAGE_KEY); } catch {}
   }, [setMessages]);
 
   return (
@@ -438,21 +405,16 @@ export function JarvisApp() {
       <div className="absolute inset-x-0 top-0 z-40 flex items-start justify-between px-6 py-4">
         <div className="flex items-center gap-3 rounded-full border border-white/10 bg-black/25 px-4 py-2 backdrop-blur-md">
           <div className="h-2 w-2 rounded-full bg-teal-400 shadow-[0_0_10px_rgba(20,184,166,0.9)]" />
-          <div className="font-display text-sm uppercase tracking-[0.5em] text-teal-200">
-            J.A.R.V.I.S
-          </div>
+          <div className="font-display text-sm uppercase tracking-[0.5em] text-teal-200">J.A.R.V.I.S</div>
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2">
           {Boolean(locationRef.current) && (
             <div className="flex items-center gap-1 rounded-full border border-white/10 bg-black/25 px-3 py-2 backdrop-blur-md">
               <MapPin className="h-3 w-3 text-teal-400" />
-              <span className="text-[10px] text-zinc-300">
-                {locationRef.current?.city ?? "Located"}
-              </span>
+              <span className="text-[10px] text-zinc-300">{locationRef.current?.city ?? "Located"}</span>
             </div>
           )}
-
           <button
             type="button"
             onClick={() => openEmailDraft()}
@@ -462,7 +424,6 @@ export function JarvisApp() {
             <Mail className="h-3 w-3" />
             <span>EMAIL</span>
           </button>
-
           <button
             type="button"
             onClick={toggleCamera}
@@ -476,7 +437,6 @@ export function JarvisApp() {
             {cameraOn ? <Camera className="h-3 w-3" /> : <CameraOff className="h-3 w-3" />}
             <span>{cameraOn ? "CAM ON" : "CAM"}</span>
           </button>
-
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
@@ -494,16 +454,19 @@ export function JarvisApp() {
         </div>
       )}
 
-      <main className="relative z-10 flex min-h-screen w-full items-center justify-center overflow-hidden">
-        <section className="relative flex h-screen w-full flex-col items-center justify-center">
+      <main className="relative z-10 mx-auto grid w-full max-w-7xl grid-cols-1 gap-0 px-4 pb-32 pt-20 lg:grid-cols-[1fr_420px] lg:px-8">
+        <section className="flex min-h-[55vh] flex-col items-center justify-center py-8 lg:min-h-[calc(100vh-12rem)]">
           <Orb state={orbState} amplitude={amplitude} />
-          <div className="pointer-events-none absolute bottom-28 left-1/2 -translate-x-1/2 text-center text-xs uppercase tracking-[0.4em] text-zinc-500">
+          <div className="mt-10 text-center text-xs uppercase tracking-[0.4em] text-zinc-500">
             {orbState === "idle" && "Standing by"}
             {orbState === "listening" && "Listening..."}
             {orbState === "thinking" && "Processing"}
             {orbState === "speaking" && "Responding"}
           </div>
         </section>
+        <aside className="h-[55vh] lg:h-[calc(100vh-12rem)]">
+          <ChatPanel messages={display} thinking={thinking} />
+        </aside>
       </main>
 
       <div className="fixed inset-x-0 bottom-0 z-40 px-4 pb-6 pt-4">
