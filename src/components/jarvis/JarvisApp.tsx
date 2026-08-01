@@ -454,8 +454,8 @@ export function JarvisApp() {
         </div>
       )}
 
-      <main className="relative z-10 mx-auto grid w-full max-w-7xl grid-cols-1 gap-0 px-4 pb-32 pt-20 lg:grid-cols-[1fr_420px] lg:px-8">
-        <section className="flex min-h-[55vh] flex-col items-center justify-center py-8 lg:min-h-[calc(100vh-12rem)]">
+      <main className="relative z-10 mx-auto w-full max-w-7xl px-4 py-20 lg:px-8">
+        <section className="flex min-h-[100vh] flex-col items-center justify-center py-8">
           <Orb state={orbState} amplitude={amplitude} />
           <div className="mt-10 text-center text-xs uppercase tracking-[0.4em] text-zinc-500">
             {orbState === "idle" && "Standing by"}
@@ -464,9 +464,6 @@ export function JarvisApp() {
             {orbState === "speaking" && "Responding"}
           </div>
         </section>
-        <aside className="h-[55vh] lg:h-[calc(100vh-12rem)]">
-          <ChatPanel messages={display} thinking={thinking} />
-        </aside>
       </main>
 
       <div className="fixed inset-x-0 bottom-0 z-40 px-4 pb-6 pt-4">
