@@ -70,39 +70,29 @@ export function useTTS() {
 
       const url = URL.createObjectURL(blob);
 
-      let useAnalyser = false;
-      try {
-        if (!ctxRef.current) {
-          ctxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-        }
-        const ctx = ctxRef.current;
-        if (ctx.state === "suspended") {
-          await ctx.resume();
-        }
-        useAnalyser = ctx.state === "running";
-      } catch {
-        useAnalyser = false;
+      if (!ctxRef.current) {
+        ctxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       }
+      const ctx = ctxRef.current;
+      if (ctx.state === "suspended") await ctx.resume().catch(() => {});
+
+      if (sourceRef.current) { try { sourceRef.current.disconnect(); } catch {} }
+      if (analyserRef.current) { try { analyserRef.current.disconnect(); } catch {} }
 
       const audio = new Audio(url);
+      audio.crossOrigin = "anonymous";
       audioRef.current = audio;
 
-      if (useAnalyser && ctxRef.current) {
-        const ctx = ctxRef.current;
-        if (sourceRef.current) { try { sourceRef.current.disconnect(); } catch {} }
-        if (analyserRef.current) { try { analyserRef.current.disconnect(); } catch {} }
+      const source = ctx.createMediaElementSource(audio);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      analyser.connect(ctx.destination);
+      sourceRef.current = source;
+      analyserRef.current = analyser;
+      dataRef.current = new Uint8Array(analyser.fftSize);
 
-        const source = ctx.createMediaElementSource(audio);
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 512;
-        source.connect(analyser);
-        analyser.connect(ctx.destination);
-        sourceRef.current = source;
-        analyserRef.current = analyser;
-        dataRef.current = new Uint8Array(analyser.fftSize);
-      }
-
-      await new Promise<void>((resolve, reject) => {
+      await new Promise<void>(async (resolve, reject) => {
         let resolved = false;
         const finish = () => {
           if (resolved) return;
@@ -125,15 +115,17 @@ export function useTTS() {
 
         audio.onplay = () => {
           setSpeaking(true);
-          if (useAnalyser) {
-            if (rafRef.current) cancelAnimationFrame(rafRef.current);
-            tick();
-          }
+          if (rafRef.current) cancelAnimationFrame(rafRef.current);
+          tick();
         };
         audio.onended = finish;
         audio.onerror = () => fail(new Error("Audio playback failed"));
 
-        audio.play().catch(fail);
+        try {
+          await audio.play();
+        } catch (e) {
+          fail(e);
+        }
       });
     },
     [tick],
