@@ -144,6 +144,7 @@ function allowOrigin(request, response) {
 }
 
 http.createServer((request, response) => {
+  console.log(`${request.method} ${request.url} from ${request.headers.origin || "direct request"}`);
   allowOrigin(request, response);
   if (request.method === "OPTIONS") return response.writeHead(204).end();
   if (request.method !== "POST" || request.url !== "/launch") return response.writeHead(404).end();
