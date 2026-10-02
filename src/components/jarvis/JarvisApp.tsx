@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useIdleTimer } from "@/hooks/useIdleTimer";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useTTS } from "@/hooks/useTTS";
-import { runLocalLauncher } from "@/lib/local-launcher";
+import { isLaunchCommand, runLocalLauncher } from "@/lib/local-launcher";
 
 import { ChatPanel, type DisplayMessage } from "./ChatPanel";
 import { EmailDraftModal } from "./EmailDraftModal";
@@ -250,6 +250,24 @@ export function JarvisApp() {
             ...current,
             { id: `local-user-${now}`, role: "user", parts: [{ type: "text", text }] } as UIMessage,
             { id: `local-jarvis-${now}`, role: "assistant", parts: [{ type: "text", text: launch.message }] } as UIMessage,
+          ]);
+          return;
+        }
+        if (isLaunchCommand(text)) {
+          const now = Date.now().toString();
+          setMessages((current) => [
+            ...current,
+            { id: `local-user-${now}`, role: "user", parts: [{ type: "text", text }] } as UIMessage,
+            {
+              id: `local-jarvis-${now}`,
+              role: "assistant",
+              parts: [
+                {
+                  type: "text",
+                  text: "I cannot reach the local app launcher. On this computer, run npm run app-launcher and leave that window open, then try again.",
+                },
+              ],
+            } as UIMessage,
           ]);
           return;
         }

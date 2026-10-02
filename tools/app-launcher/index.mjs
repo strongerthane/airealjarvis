@@ -112,6 +112,7 @@ http.createServer((request, response) => {
       if (typeof command !== "string") throw new Error("Command required");
       const action = resolve(command);
       if (!action) return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ handled: false, message: "Not a launch command." }));
+      console.log(`JARVIS request: ${command} -> ${action.message}`);
       if (action.kind === "app") openApp(action.executable);
       else openUrl(action.url);
       response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ handled: true, message: action.message }));
