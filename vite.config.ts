@@ -7,6 +7,10 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
+  // This project is deployed on Vercel.  The Lovable config defaults to a
+  // Cloudflare worker outside its own hosting environment, which prevents
+  // server-side AI requests from running in the intended Vercel runtime.
+  nitro: { preset: "vercel" },
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this
