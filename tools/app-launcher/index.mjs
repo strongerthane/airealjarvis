@@ -71,26 +71,35 @@ function startMenuFolders() {
   ].filter(Boolean);
 }
 
+let installedApps;
+
+function visitStartMenu(folder, depth = 0) {
+  if (depth > 5) return;
+  let entries;
+  try { entries = readdirSync(folder, { withFileTypes: true }); } catch { return; }
+  for (const entry of entries) {
+    const fullPath = path.join(folder, entry.name);
+    if (entry.isDirectory()) visitStartMenu(fullPath, depth + 1);
+    if (!entry.isFile() || path.extname(entry.name).toLowerCase() !== ".lnk") continue;
+    installedApps.push({ fullPath, label: normalize(path.basename(entry.name, ".lnk")) });
+  }
+}
+
+function getInstalledApps() {
+  if (installedApps) return installedApps;
+  installedApps = [];
+  for (const folder of startMenuFolders()) visitStartMenu(folder);
+  return installedApps;
+}
+
 function findInstalledApp(target) {
   const requested = normalize(target);
   if (requested.length < 2) return null;
   const matches = [];
-
-  function visit(folder, depth = 0) {
-    if (depth > 5) return;
-    let entries;
-    try { entries = readdirSync(folder, { withFileTypes: true }); } catch { return; }
-    for (const entry of entries) {
-      const fullPath = path.join(folder, entry.name);
-      if (entry.isDirectory()) visit(fullPath, depth + 1);
-      if (!entry.isFile() || path.extname(entry.name).toLowerCase() !== ".lnk") continue;
-      const label = normalize(path.basename(entry.name, ".lnk"));
-      const score = label === requested ? 3 : label.startsWith(requested) ? 2 : label.includes(requested) ? 1 : 0;
-      if (score) matches.push({ fullPath, label, score });
-    }
+  for (const app of getInstalledApps()) {
+    const score = app.label === requested ? 3 : app.label.startsWith(requested) ? 2 : app.label.includes(requested) ? 1 : 0;
+    if (score) matches.push({ ...app, score });
   }
-
-  for (const folder of startMenuFolders()) visit(folder);
   matches.sort((a, b) => b.score - a.score || a.label.length - b.label.length);
   return matches[0] ?? null;
 }
@@ -170,5 +179,5 @@ http.createServer((request, response) => {
     }
   });
 }).listen(PORT, "127.0.0.1", () => {
-  console.log(`JARVIS local launcher ready on http://127.0.0.1:${PORT}`);
+  console.log(`JARVIS local launcher ready on http://127.0.0.1:${PORT} (${getInstalledApps().length} installed app shortcuts indexed)`);
 });

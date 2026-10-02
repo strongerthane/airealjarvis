@@ -18,7 +18,9 @@ export async function runLocalLauncher(command: string): Promise<LocalLaunchResu
   if (!isLaunchCommand(command)) return null;
 
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 1_500);
+  // The local helper can take a moment on its first request while indexing the
+  // Windows Start-menu shortcuts.
+  const timeout = window.setTimeout(() => controller.abort(), 6_000);
   try {
     const response = await fetch(LAUNCHER_URL, {
       method: "POST",
