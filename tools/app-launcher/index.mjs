@@ -94,6 +94,9 @@ function allowOrigin(request, response) {
   response.setHeader("Vary", "Origin");
   response.setHeader("Access-Control-Allow-Headers", "Content-Type");
   response.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  // Chrome may send a Private Network Access preflight when the hosted site
+  // contacts this loopback-only companion.
+  response.setHeader("Access-Control-Allow-Private-Network", "true");
 }
 
 http.createServer((request, response) => {
