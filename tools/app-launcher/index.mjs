@@ -56,7 +56,7 @@ function searchUrl(query) {
 }
 
 function resolve(command) {
-  const raw = command.trim();
+  const raw = command.trim().replace(/^j(?:[.\s]*)a(?:[.\s]*)r(?:[.\s]*)v(?:[.\s]*)i(?:[.\s]*)s[,:!.\s]*/i, "").trim();
   const text = normalize(raw);
   if (!/^(?:open|launch|start|run|play|watch|search(?: for)?|find|go to|visit)\b/.test(text)) return null;
 
