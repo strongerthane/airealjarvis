@@ -1,4 +1,6 @@
 import http from "node:http";
+import path from "node:path";
+import { readdirSync } from "node:fs";
 import { spawn } from "node:child_process";
 
 const PORT = Number(process.env.JARVIS_LAUNCHER_PORT || 27183);
@@ -51,8 +53,46 @@ function openApp(executable) {
   child.unref();
 }
 
+function openShortcut(shortcut) {
+  // The shortcut comes only from the user's own Start-menu folders. Explorer
+  // resolves it without passing user-provided command text to a shell.
+  const child = spawn("explorer.exe", [shortcut], { detached: true, stdio: "ignore", windowsHide: false });
+  child.unref();
+}
+
 function searchUrl(query) {
   return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+}
+
+function startMenuFolders() {
+  return [
+    process.env.ProgramData && path.join(process.env.ProgramData, "Microsoft", "Windows", "Start Menu", "Programs"),
+    process.env.APPDATA && path.join(process.env.APPDATA, "Microsoft", "Windows", "Start Menu", "Programs"),
+  ].filter(Boolean);
+}
+
+function findInstalledApp(target) {
+  const requested = normalize(target);
+  if (requested.length < 2) return null;
+  const matches = [];
+
+  function visit(folder, depth = 0) {
+    if (depth > 5) return;
+    let entries;
+    try { entries = readdirSync(folder, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      const fullPath = path.join(folder, entry.name);
+      if (entry.isDirectory()) visit(fullPath, depth + 1);
+      if (!entry.isFile() || path.extname(entry.name).toLowerCase() !== ".lnk") continue;
+      const label = normalize(path.basename(entry.name, ".lnk"));
+      const score = label === requested ? 3 : label.startsWith(requested) ? 2 : label.includes(requested) ? 1 : 0;
+      if (score) matches.push({ fullPath, label, score });
+    }
+  }
+
+  for (const folder of startMenuFolders()) visit(folder);
+  matches.sort((a, b) => b.score - a.score || a.label.length - b.label.length);
+  return matches[0] ?? null;
 }
 
 function resolve(command) {
@@ -80,6 +120,10 @@ function resolve(command) {
   if (APPS[target]) return { kind: "app", executable: APPS[target], message: `Opening ${target}.` };
   if (target === "settings" || target === "windows settings") {
     return { kind: "url", url: "ms-settings:", message: "Opening Windows Settings." };
+  }
+  const installedApp = findInstalledApp(target);
+  if (installedApp) {
+    return { kind: "shortcut", shortcut: installedApp.fullPath, message: `Opening ${installedApp.label}.` };
   }
   if (SITES[target]) return { kind: "url", url: SITES[target], message: `Opening ${target}.` };
   if (/^[a-z0-9.-]+\.[a-z]{2,}(?:\/.*)?$/i.test(target)) {
@@ -117,6 +161,7 @@ http.createServer((request, response) => {
       if (!action) return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ handled: false, message: "Not a launch command." }));
       console.log(`JARVIS request: ${command} -> ${action.message}`);
       if (action.kind === "app") openApp(action.executable);
+      else if (action.kind === "shortcut") openShortcut(action.shortcut);
       else openUrl(action.url);
       response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ handled: true, message: action.message }));
     } catch {
