@@ -41,7 +41,6 @@ function messageToText(m: UIMessage): string {
     .map((p: any) => {
       if (!p) return "";
       if (p.type === "text" && typeof p.text === "string") return p.text;
-      if (typeof p.text === "string") return p.text;
       return "";
     })
     .join("")
