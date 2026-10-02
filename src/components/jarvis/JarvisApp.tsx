@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useIdleTimer } from "@/hooks/useIdleTimer";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useTTS } from "@/hooks/useTTS";
+import { runLocalLauncher } from "@/lib/local-launcher";
 
 import { ChatPanel, type DisplayMessage } from "./ChatPanel";
 import { EmailDraftModal } from "./EmailDraftModal";
@@ -237,6 +238,27 @@ export function JarvisApp() {
     transport,
   });
 
+  const onSend = useCallback(
+    (text: string) => {
+      speakingQueueRef.current = [];
+      spokenSentenceCountRef.current = {};
+      void (async () => {
+        const launch = await runLocalLauncher(text);
+        if (launch) {
+          const now = Date.now().toString();
+          setMessages((current) => [
+            ...current,
+            { id: `local-user-${now}`, role: "user", parts: [{ type: "text", text }] } as UIMessage,
+            { id: `local-jarvis-${now}`, role: "assistant", parts: [{ type: "text", text: launch.message }] } as UIMessage,
+          ]);
+          return;
+        }
+        void sendMessage({ text });
+      })();
+    },
+    [sendMessage, setMessages],
+  );
+
   useEffect(() => {
     const stored = loadStored();
     if (stored.length) {
@@ -300,9 +322,9 @@ export function JarvisApp() {
   const handleFinal = useCallback(
     (text: string) => {
       setInterim("");
-      void sendMessage({ text });
+      onSend(text);
     },
-    [sendMessage],
+    [onSend],
   );
 
   const { listening, supported, start, stop } = useSpeechRecognition({
@@ -339,15 +361,6 @@ export function JarvisApp() {
     if (typeof window === "undefined") return "/api/public/n8n";
     return `${window.location.origin}/api/public/n8n`;
   }, []);
-
-  const onSend = useCallback(
-    (text: string) => {
-      speakingQueueRef.current = [];
-      spokenSentenceCountRef.current = {};
-      void sendMessage({ text });
-    },
-    [sendMessage],
-  );
 
   const toggleMic = useCallback(() => {
     if (listening) stop();

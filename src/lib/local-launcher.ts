@@ -1,0 +1,33 @@
+export type LocalLaunchResult = {
+  handled: boolean;
+  message: string;
+};
+
+const LAUNCHER_URL = "http://127.0.0.1:27183/launch";
+const COMMAND_PREFIX = /^(?:open|launch|start|run|play|watch|search(?:\s+for)?|find|go\s+to|visit)\b/i;
+
+export function isLaunchCommand(text: string) {
+  return COMMAND_PREFIX.test(text.trim());
+}
+
+export async function runLocalLauncher(command: string): Promise<LocalLaunchResult | null> {
+  if (!isLaunchCommand(command)) return null;
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 1_500);
+  try {
+    const response = await fetch(LAUNCHER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ command }),
+      signal: controller.signal,
+    });
+    if (!response.ok) return null;
+    const result = (await response.json()) as LocalLaunchResult;
+    return result.handled ? result : null;
+  } catch {
+    return null;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
