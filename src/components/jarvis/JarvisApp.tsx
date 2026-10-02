@@ -17,24 +17,8 @@ import { Orb, type OrbState } from "./Orb";
 import { SettingsDialog } from "./SettingsDialog";
 import { SleepScreen } from "./SleepScreen";
 
-const STORAGE_KEY = "jarvis:messages:v1";
 const VOICE_KEY = "jarvis:voiceId";
 const DEFAULT_VOICE = "JBFqnCBsd6RMkjVDRZzb";
-
-function loadStored(): UIMessage[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return (parsed as UIMessage[]).filter(
-      (m) => m && m.id && m.role && Array.isArray(m.parts) && m.parts.length > 0,
-    );
-  } catch {
-    return [];
-  }
-}
 
 function messageToText(m: UIMessage): string {
   if (!Array.isArray(m.parts)) return "";
@@ -63,7 +47,6 @@ export function JarvisApp() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [interim, setInterim] = useState("");
   const [n8nMessages, setN8nMessages] = useState<InboxEntry[]>([]);
-  const [bootstrapped, setBootstrapped] = useState(false);
 
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -278,22 +261,9 @@ export function JarvisApp() {
   );
 
   useEffect(() => {
-    const stored = loadStored();
-    if (stored.length) {
-      setMessages(stored);
-      for (const m of stored) {
-        if (m.role === "assistant") spokenIdsRef.current.add(m.id);
-      }
-    }
     const v = localStorage.getItem(VOICE_KEY);
     if (v) setVoiceIdState(v);
-    setBootstrapped(true);
-  }, [setMessages]);
-
-  useEffect(() => {
-    if (!bootstrapped) return;
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); } catch {}
-  }, [messages, bootstrapped]);
+  }, []);
 
   useEffect(() => {
     const last = messages[messages.length - 1];
@@ -391,7 +361,6 @@ export function JarvisApp() {
     spokenIdsRef.current = new Set();
     spokenSentenceCountRef.current = {};
     speakingQueueRef.current = [];
-    try { localStorage.removeItem(STORAGE_KEY); } catch {}
   }, [setMessages]);
 
   return (
